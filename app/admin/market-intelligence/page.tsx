@@ -139,33 +139,145 @@ export default function MarketIntelligencePage() {
     return { brief, demand, clinics, actions }
   }
 
-  const handleRunScan = () => {
+  const handleRunScan = async () => {
     if (!query.trim()) return
     
     setScanning(true)
     
-    // Simulate API delay
-    setTimeout(() => {
+    try {
+      // Call MCP orchestration API
+      const response = await fetch('/api/admin/mcp/market-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: query,
+          tool: 'orchestrate',
+          params: {},
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Market intelligence scan failed')
+      }
+
+      const data = await response.json()
+      
+      // Convert API response to UI format
+      const { serviceLine, regionDemand, clinicMatches, analysis } = data
+      
+      // Map region demand data to table format
+      const demandTableData: DemandRegion[] = regionDemand.map((r: any) => ({
+        region: r.region,
+        serviceLine: r.serviceLine,
+        demandIndex: r.demand_index,
+        trend: r.trend === 'RISING' ? 'Rising' : r.trend === 'FALLING' ? 'Falling' : 'Stable',
+      }))
+      
+      // Map clinic matches to target clinics format
+      const clinicsTableData: TargetClinic[] = analysis.targetClinics.map((c: any) => ({
+        name: c.name,
+        city: clinicMatches.find((cm: any) => cm.clinic_id === c.clinic_id)?.city || '',
+        state: c.state,
+        serviceLines: clinicMatches.find((cm: any) => cm.clinic_id === c.clinic_id)?.service_lines || [],
+        needsPatients: clinicMatches.find((cm: any) => cm.clinic_id === c.clinic_id)?.lead_status === 'actively_accepting' ? 'Yes' : 'At Capacity',
+        suggestedAction: c.why_target,
+      }))
+      
+      // Build market brief
+      const brief: MarketBrief = {
+        question: analysis.interpretedQuestion,
+        topRegions: analysis.topRegions.map((r: any) => r.region),
+        reasoning: analysis.topRegions.map((r: any) => `${r.region}: ${r.reason}`).join(' '),
+        recommendedMove: analysis.primaryMove,
+      }
+      
+      setMarketBrief(brief)
+      setDemandData(demandTableData)
+      setTargetClinics(clinicsTableData)
+      setActionRecommendations([analysis.primaryMove, ...analysis.secondaryMoves])
+      setHasScanned(true)
+    } catch (error) {
+      console.error('Market scan error:', error)
+      // Fallback to mock data on error
       const response = generateMockResponse(query)
       setMarketBrief(response.brief)
       setDemandData(response.demand)
       setTargetClinics(response.clinics)
       setActionRecommendations(response.actions)
       setHasScanned(true)
+    } finally {
       setScanning(false)
-    }, 1500)
+    }
   }
 
-  const handleQuickAction = (action: string) => {
+  const handleQuickAction = async (action: string) => {
     setQuery(action)
-    setTimeout(() => {
+    setScanning(true)
+    
+    try {
+      // Call MCP orchestration API
+      const response = await fetch('/api/admin/mcp/market-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: action,
+          tool: 'orchestrate',
+          params: {},
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Market intelligence scan failed')
+      }
+
+      const data = await response.json()
+      
+      // Convert API response to UI format
+      const { serviceLine, regionDemand, clinicMatches, analysis } = data
+      
+      // Map region demand data to table format
+      const demandTableData: DemandRegion[] = regionDemand.map((r: any) => ({
+        region: r.region,
+        serviceLine: r.serviceLine,
+        demandIndex: r.demand_index,
+        trend: r.trend === 'RISING' ? 'Rising' : r.trend === 'FALLING' ? 'Falling' : 'Stable',
+      }))
+      
+      // Map clinic matches to target clinics format
+      const clinicsTableData: TargetClinic[] = analysis.targetClinics.map((c: any) => ({
+        name: c.name,
+        city: clinicMatches.find((cm: any) => cm.clinic_id === c.clinic_id)?.city || '',
+        state: c.state,
+        serviceLines: clinicMatches.find((cm: any) => cm.clinic_id === c.clinic_id)?.service_lines || [],
+        needsPatients: clinicMatches.find((cm: any) => cm.clinic_id === c.clinic_id)?.lead_status === 'actively_accepting' ? 'Yes' : 'At Capacity',
+        suggestedAction: c.why_target,
+      }))
+      
+      // Build market brief
+      const brief: MarketBrief = {
+        question: analysis.interpretedQuestion,
+        topRegions: analysis.topRegions.map((r: any) => r.region),
+        reasoning: analysis.topRegions.map((r: any) => `${r.region}: ${r.reason}`).join(' '),
+        recommendedMove: analysis.primaryMove,
+      }
+      
+      setMarketBrief(brief)
+      setDemandData(demandTableData)
+      setTargetClinics(clinicsTableData)
+      setActionRecommendations([analysis.primaryMove, ...analysis.secondaryMoves])
+      setHasScanned(true)
+    } catch (error) {
+      console.error('Market scan error:', error)
+      // Fallback to mock data on error
       const response = generateMockResponse(action)
       setMarketBrief(response.brief)
       setDemandData(response.demand)
       setTargetClinics(response.clinics)
       setActionRecommendations(response.actions)
       setHasScanned(true)
-    }, 1500)
+    } finally {
+      setScanning(false)
+    }
   }
 
   return (
