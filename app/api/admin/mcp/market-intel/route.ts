@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { queryRegionDemand, ServiceLine as DemandServiceLine } from '@/lib/mcp/market-intel/bigquery-region-demand'
 import { searchClinics } from '@/lib/mcp/market-intel/bigquery-clinic-search'
 import { analyzeMarket } from '@/lib/mcp/market-intel/vertex-market-brain'
+import { fetchGoogleTrends, TrendServiceLine } from '@/lib/mcp/market-intel/google-trends-service-interest'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,16 +26,19 @@ export async function POST(request: NextRequest) {
       case 'bigquery_clinic_search':
         return await handleClinicSearch(params)
       
+      case 'google_trends_service_line_interest':
+        return await handleGoogleTrends(params)
+      
       case 'vertex_market_brain':
         return await handleMarketBrain(params)
       
       case 'orchestrate':
-        // Full orchestration: run all three tools
+        // Full orchestration: run all tools including trends
         return await handleOrchestration(question, params)
       
       default:
         return NextResponse.json(
-          { error: 'Invalid tool specified', availableTools: ['bigquery_region_demand', 'bigquery_clinic_search', 'vertex_market_brain', 'orchestrate'] },
+          { error: 'Invalid tool specified', availableTools: ['bigquery_region_demand', 'bigquery_clinic_search', 'google_trends_service_line_interest', 'vertex_market_brain', 'orchestrate'] },
           { status: 400 }
         )
     }
@@ -91,10 +95,35 @@ async function handleClinicSearch(params: any) {
 }
 
 /**
+ * Handle google_trends_service_line_interest tool call
+ */
+async function handleGoogleTrends(params: any) {
+  const { serviceLine, region, timeRange } = params
+
+  if (!serviceLine) {
+    return NextResponse.json(
+      { error: 'serviceLine is required' },
+      { status: 400 }
+    )
+  }
+
+  const results = await fetchGoogleTrends({
+    serviceLine: serviceLine as TrendServiceLine,
+    region,
+    timeRange,
+  })
+
+  return NextResponse.json({
+    tool: 'google_trends_service_line_interest',
+    results,
+  })
+}
+
+/**
  * Handle vertex_market_brain tool call
  */
 async function handleMarketBrain(params: any) {
-  const { question, serviceLine, regionDemand, clinicMatches } = params
+  const { question, serviceLine, regionDemand, clinicMatches, trendsData } = params
 
   if (!question || !regionDemand || !clinicMatches) {
     return NextResponse.json(
@@ -108,6 +137,7 @@ async function handleMarketBrain(params: any) {
     serviceLine,
     regionDemand,
     clinicMatches,
+    trendsData,
   })
 
   return NextResponse.json({
@@ -117,11 +147,11 @@ async function handleMarketBrain(params: any) {
 }
 
 /**
- * Orchestrate all three tools in sequence
+ * Orchestrate all tools in sequence
  * This is the main workflow for the Market Intelligence Console
  */
 async function handleOrchestration(question: string, params: any) {
-  const { serviceLine, region } = params
+  const { serviceLine, region, timeRange } = params
 
   if (!question) {
     return NextResponse.json(
@@ -146,6 +176,21 @@ async function handleOrchestration(question: string, params: any) {
     }
   }
 
+  // Infer region for trends if not provided
+  let trendsRegion = region
+  if (!trendsRegion) {
+    const questionLower = question.toLowerCase()
+    if (questionLower.includes('texas') || questionLower.includes(' tx')) {
+      trendsRegion = 'US-TX'
+    } else if (questionLower.includes('florida') || questionLower.includes(' fl')) {
+      trendsRegion = 'US-FL'
+    } else if (questionLower.includes('california') || questionLower.includes(' ca')) {
+      trendsRegion = 'US-CA'
+    } else {
+      trendsRegion = 'US' // Default to nationwide
+    }
+  }
+
   // Step 1: Query region demand
   console.log(`[MCP] Step 1: Querying region demand for ${inferredServiceLine}`)
   const regionDemand = await queryRegionDemand({
@@ -159,13 +204,22 @@ async function handleOrchestration(question: string, params: any) {
     region,
   })
 
-  // Step 3: Analyze with Vertex AI
-  console.log(`[MCP] Step 3: Analyzing market data with Vertex AI`)
+  // Step 3: Fetch Google Trends data
+  console.log(`[MCP] Step 3: Fetching Google Trends for ${inferredServiceLine} in ${trendsRegion}`)
+  const trendsData = await fetchGoogleTrends({
+    serviceLine: inferredServiceLine as TrendServiceLine,
+    region: trendsRegion,
+    timeRange: timeRange || 'now 30-d',
+  })
+
+  // Step 4: Analyze with Vertex AI (including trends)
+  console.log(`[MCP] Step 4: Analyzing market data with Vertex AI (including trends)`)
   const analysis = await analyzeMarket({
     question,
     serviceLine: inferredServiceLine,
     regionDemand,
     clinicMatches,
+    trendsData,
   })
 
   // Return complete orchestrated response
@@ -174,6 +228,7 @@ async function handleOrchestration(question: string, params: any) {
     serviceLine: inferredServiceLine,
     regionDemand,
     clinicMatches,
+    trendsData,
     analysis,
   })
 }

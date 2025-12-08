@@ -28,6 +28,23 @@ interface MarketBrief {
   recommendedMove: string
 }
 
+interface GoogleTrendsData {
+  serviceLine: string
+  region: string
+  timeRange: string
+  trendDirection: 'RISING' | 'STABLE' | 'FALLING'
+  trendStrength: number
+  topRegions: Array<{ region: string; interestIndex: number }>
+  risingQueries: Array<{ query: string; growthScore: number }>
+}
+
+interface TrendAnalysis {
+  trendSummary: string
+  trendConfidence: number
+  firstMove: string
+  firstMoveReason: string
+}
+
 const QUICK_ACTIONS = [
   "Where should we deploy TRT ads right now?",
   "Which regions are spiking in weight loss demand?",
@@ -45,6 +62,8 @@ export default function MarketIntelligencePage() {
   const [demandData, setDemandData] = useState<DemandRegion[]>([])
   const [targetClinics, setTargetClinics] = useState<TargetClinic[]>([])
   const [actionRecommendations, setActionRecommendations] = useState<string[]>([])
+  const [trendsData, setTrendsData] = useState<GoogleTrendsData | null>(null)
+  const [trendAnalysis, setTrendAnalysis] = useState<TrendAnalysis | null>(null)
 
   const generateMockResponse = (question: string) => {
     // Determine service line from query
@@ -163,7 +182,7 @@ export default function MarketIntelligencePage() {
       const data = await response.json()
       
       // Convert API response to UI format
-      const { serviceLine, regionDemand, clinicMatches, analysis } = data
+      const { serviceLine, regionDemand, clinicMatches, trendsData: trends, analysis } = data
       
       // Map region demand data to table format
       const demandTableData: DemandRegion[] = regionDemand.map((r: any) => ({
@@ -195,6 +214,22 @@ export default function MarketIntelligencePage() {
       setDemandData(demandTableData)
       setTargetClinics(clinicsTableData)
       setActionRecommendations([analysis.primaryMove, ...analysis.secondaryMoves])
+      
+      // Set trends data
+      if (trends) {
+        setTrendsData(trends)
+      }
+      
+      // Set trend analysis
+      if (analysis.trendSummary) {
+        setTrendAnalysis({
+          trendSummary: analysis.trendSummary,
+          trendConfidence: analysis.trendConfidence || 0.5,
+          firstMove: analysis.firstMove,
+          firstMoveReason: analysis.firstMoveReason,
+        })
+      }
+      
       setHasScanned(true)
     } catch (error) {
       console.error('Market scan error:', error)
@@ -233,7 +268,7 @@ export default function MarketIntelligencePage() {
       const data = await response.json()
       
       // Convert API response to UI format
-      const { serviceLine, regionDemand, clinicMatches, analysis } = data
+      const { serviceLine, regionDemand, clinicMatches, trendsData: trends, analysis } = data
       
       // Map region demand data to table format
       const demandTableData: DemandRegion[] = regionDemand.map((r: any) => ({
@@ -265,6 +300,22 @@ export default function MarketIntelligencePage() {
       setDemandData(demandTableData)
       setTargetClinics(clinicsTableData)
       setActionRecommendations([analysis.primaryMove, ...analysis.secondaryMoves])
+      
+      // Set trends data
+      if (trends) {
+        setTrendsData(trends)
+      }
+      
+      // Set trend analysis
+      if (analysis.trendSummary) {
+        setTrendAnalysis({
+          trendSummary: analysis.trendSummary,
+          trendConfidence: analysis.trendConfidence || 0.5,
+          firstMove: analysis.firstMove,
+          firstMoveReason: analysis.firstMoveReason,
+        })
+      }
+      
       setHasScanned(true)
     } catch (error) {
       console.error('Market scan error:', error)
@@ -394,6 +445,103 @@ export default function MarketIntelligencePage() {
               </div>
             </div>
           </div>
+
+          {/* Google Trends Signal */}
+          {trendsData && (
+            <div className="bg-dark-surface border border-dark-border rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold text-white">Google Trends Signal</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">
+                    {trendsData.serviceLine} · {trendsData.region} · {trendsData.timeRange}
+                  </span>
+                  <span
+                    className={clsx(
+                      'px-3 py-1 rounded-full text-xs font-medium',
+                      trendsData.trendDirection === 'RISING' && 'bg-status-live/10 text-status-live',
+                      trendsData.trendDirection === 'STABLE' && 'bg-gray-500/10 text-gray-400',
+                      trendsData.trendDirection === 'FALLING' && 'bg-status-offline/10 text-status-offline'
+                    )}
+                  >
+                    {trendsData.trendDirection} ({(trendsData.trendStrength * 100).toFixed(0)}% strength)
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                    Top Search Regions
+                  </h4>
+                  <div className="space-y-2">
+                    {trendsData.topRegions.slice(0, 5).map((r, idx) => (
+                      <div key={idx} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-300">{r.region}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 bg-dark-accent rounded-full h-2">
+                            <div
+                              className="bg-primary h-2 rounded-full"
+                              style={{ width: `${r.interestIndex}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-xs text-white font-medium w-8 text-right">
+                            {r.interestIndex}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                    Rising Queries
+                  </h4>
+                  <div className="space-y-1.5">
+                    {trendsData.risingQueries.slice(0, 5).map((q, idx) => (
+                      <div key={idx} className="flex items-start gap-2">
+                        <span className="text-primary text-xs mt-0.5">↗</span>
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-300">{q.query}</p>
+                          <p className="text-xs text-gray-500">+{q.growthScore}% growth</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {trendAnalysis && (
+                <div className="mt-4 pt-4 border-t border-dark-border">
+                  <p className="text-sm text-gray-300 leading-relaxed mb-3">
+                    {trendAnalysis.trendSummary}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* First Move This Week */}
+          {trendAnalysis && (
+            <div className="bg-primary/10 border-2 border-primary/40 rounded-lg p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Target className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold text-white">First Move This Week</h3>
+                <span className="px-2 py-0.5 bg-primary/20 border border-primary/40 rounded-full text-xs text-primary font-medium">
+                  {(trendAnalysis.trendConfidence * 100).toFixed(0)}% confidence
+                </span>
+              </div>
+              <p className="text-base text-white font-semibold mb-2 leading-relaxed">
+                {trendAnalysis.firstMove}
+              </p>
+              <p className="text-sm text-gray-300 leading-relaxed">
+                <span className="text-gray-400">Why:</span> {trendAnalysis.firstMoveReason}
+              </p>
+            </div>
+          )}
 
           {/* Demand Heat & Clinics List */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

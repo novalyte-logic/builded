@@ -7,6 +7,7 @@
 import { VertexAI } from '@google-cloud/vertexai'
 import { RegionDemand } from './bigquery-region-demand'
 import { ClinicSearchResult } from './bigquery-clinic-search'
+import { GoogleTrendsResult } from './google-trends-service-interest'
 
 export interface TargetRegion {
   region: string
@@ -27,6 +28,10 @@ export interface MarketBrainOutput {
   targetClinics: TargetClinic[]
   primaryMove: string
   secondaryMoves: string[]
+  trendSummary: string
+  trendConfidence: number // 0-1
+  firstMove: string
+  firstMoveReason: string
 }
 
 export interface MarketBrainInput {
@@ -34,13 +39,14 @@ export interface MarketBrainInput {
   serviceLine?: string
   regionDemand: RegionDemand[]
   clinicMatches: ClinicSearchResult[]
+  trendsData?: GoogleTrendsResult
 }
 
 /**
  * Call Vertex AI to analyze market data and generate strategic recommendations
  */
 export async function analyzeMarket(input: MarketBrainInput): Promise<MarketBrainOutput> {
-  const { question, serviceLine, regionDemand, clinicMatches } = input
+  const { question, serviceLine, regionDemand, clinicMatches, trendsData } = input
 
   try {
     // Initialize Vertex AI client
@@ -61,6 +67,7 @@ You will receive:
 1. A natural language question from a Superadmin
 2. Regional demand data showing which states/regions have high demand
 3. A list of clinics that match the criteria
+4. Google Trends data showing real-time search interest and momentum
 
 Your response MUST be valid JSON with this exact structure:
 {
@@ -68,7 +75,7 @@ Your response MUST be valid JSON with this exact structure:
   "topRegions": [
     {
       "region": "TX",
-      "reason": "Why this region is a top target (cite demand_index, trend, etc.)",
+      "reason": "Why this region is a top target (cite demand_index, trend, Google Trends signals)",
       "suggestedBudgetShare": 40
     }
   ],
@@ -83,30 +90,53 @@ Your response MUST be valid JSON with this exact structure:
   "primaryMove": "The single most important action to take right now",
   "secondaryMoves": [
     "Additional strategic moves ranked by priority"
-  ]
+  ],
+  "trendSummary": "A 2-3 sentence summary of Google Trends signals and how they align with BigQuery demand data",
+  "trendConfidence": 0.85,
+  "firstMove": "A single specific action the admin should take within the next 7 days based on trends + demand alignment",
+  "firstMoveReason": "Why this is the recommended first move, citing trend momentum and demand data"
 }
 
 Guidelines:
 - Be specific and actionable
-- Cite actual numbers from the data (demand_index, trend)
+- Cite actual numbers from the data (demand_index, trend, Google Trends interest)
+- Interpret whether NOW is a good, neutral, or bad moment to deploy ads based on trend direction
 - Budget shares should add up to 100% across top 3-5 regions
 - Focus on ROI and strategic positioning
 - Consider clinic capacity and price bands
 - Prioritize "actively_accepting" clinics over "at_capacity"
-- Match premium service demand with premium price_band clinics`
+- Match premium service demand with premium price_band clinics
+- Use Google Trends risingQueries to suggest ad copy angles
+- Identify trend + demand alignment (regions high in both signals)
+- Set trendConfidence based on trend strength and alignment with demand data`
 
     // Build user prompt with data
+    const trendsSection = trendsData
+      ? `
+
+Google Trends Data:
+${JSON.stringify(trendsData, null, 2)}
+
+Key Trends Insights:
+- Trend Direction: ${trendsData.trendDirection}
+- Trend Strength: ${trendsData.trendStrength}
+- Top ${trendsData.topRegions.length} regions by search interest: ${trendsData.topRegions.slice(0, 3).map(r => r.region).join(', ')}
+- Rising queries: ${trendsData.risingQueries.slice(0, 3).map(q => q.query).join(', ')}
+`
+      : ''
+
     const userPrompt = `Question: "${question}"
 
 Service Line: ${serviceLine || 'Not specified'}
 
-Regional Demand Data:
+Regional Demand Data (from BigQuery):
 ${JSON.stringify(regionDemand, null, 2)}
 
 Matching Clinics:
-${JSON.stringify(clinicMatches.slice(0, 15), null, 2)}
+${JSON.stringify(clinicMatches.slice(0, 15), null, 2)}${trendsSection}
 
-Provide your market intelligence analysis in the required JSON format.`
+Provide your market intelligence analysis in the required JSON format. 
+${trendsData ? 'Pay special attention to regions where BOTH BigQuery demand AND Google Trends interest are high - these are optimal deployment targets.' : ''}`
 
     // Call Gemini
     const result = await generativeModel.generateContent({
@@ -160,7 +190,7 @@ Provide your market intelligence analysis in the required JSON format.`
  * Used when Vertex AI is unavailable
  */
 function generateFallbackAnalysis(input: MarketBrainInput): MarketBrainOutput {
-  const { question, serviceLine, regionDemand, clinicMatches } = input
+  const { question, serviceLine, regionDemand, clinicMatches, trendsData } = input
 
   // Sort regions by demand index
   const topRegionData = [...regionDemand]
@@ -197,12 +227,41 @@ function generateFallbackAnalysis(input: MarketBrainInput): MarketBrainOutput {
     `Monitor conversion rates and adjust budget allocation between regions after 2 weeks`,
   ]
 
+  // Generate trend summary
+  let trendSummary = 'Trend data not available.'
+  let trendConfidence = 0.5
+  let firstMove = primaryMove
+  let firstMoveReason = 'Based on demand index and clinic capacity.'
+
+  if (trendsData) {
+    const trendText = trendsData.trendDirection === 'RISING' ? 'rising' : trendsData.trendDirection === 'FALLING' ? 'falling' : 'stable'
+    const strengthText = trendsData.trendStrength > 0.7 ? 'strongly' : trendsData.trendStrength > 0.4 ? 'moderately' : 'slightly'
+    
+    trendSummary = `${serviceLine} interest is ${strengthText} ${trendText} with ${trendsData.timeRange}. ` +
+      `Top search regions: ${trendsData.topRegions.slice(0, 3).map(r => r.region).join(', ')}. ` +
+      `Rising queries include: ${trendsData.risingQueries.slice(0, 2).map(q => q.query).join(', ')}.`
+    
+    trendConfidence = trendsData.trendStrength * 0.8 + 0.2
+    
+    if (trendsData.trendDirection === 'RISING' && trendsData.trendStrength > 0.6) {
+      firstMove = `Launch a 7-day test campaign in ${topRegions[0]?.region} for ${serviceText} while momentum is building.`
+      firstMoveReason = `Google Trends shows ${strengthText} rising interest (${trendsData.trendStrength.toFixed(2)} strength) aligning with high BigQuery demand (${topRegionData[0]?.demand_index}/100). Strike while demand is climbing.`
+    } else if (trendsData.trendDirection === 'FALLING') {
+      firstMove = `Pause new ad spend and focus on converting existing ${serviceText} leads in pipeline.`
+      firstMoveReason = `Google Trends shows falling interest. Prioritize lead nurturing and conversion over new acquisition until momentum shifts.`
+    }
+  }
+
   return {
     interpretedQuestion: question,
     topRegions,
     targetClinics,
     primaryMove,
     secondaryMoves,
+    trendSummary,
+    trendConfidence,
+    firstMove,
+    firstMoveReason,
   }
 }
 

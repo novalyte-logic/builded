@@ -35,6 +35,19 @@ interface MarketIntelResult {
   primaryMove: string
   secondaryMoves: string[]
   regionDemand: RegionDemand[]
+  trendsData?: {
+    serviceLine: string
+    region: string
+    timeRange: string
+    trendDirection: 'RISING' | 'STABLE' | 'FALLING'
+    trendStrength: number
+    topRegions: Array<{ region: string; interestIndex: number }>
+    risingQueries: Array<{ query: string; growthScore: number }>
+  }
+  trendSummary?: string
+  trendConfidence?: number
+  firstMove?: string
+  firstMoveReason?: string
 }
 
 const QUICK_ACTIONS = [
@@ -256,7 +269,7 @@ export default function ClinicsControlPage() {
       const data = await response.json()
       
       // Map to result format
-      const { regionDemand, clinicMatches, analysis } = data
+      const { regionDemand, clinicMatches, trendsData: trends, analysis } = data
       
       const result: MarketIntelResult = {
         interpretedQuestion: analysis.interpretedQuestion,
@@ -275,6 +288,11 @@ export default function ClinicsControlPage() {
           trend: rd.trend === 'RISING' ? 'Rising' : rd.trend === 'FALLING' ? 'Falling' : 'Stable',
           sampleSize: rd.sample_size,
         })),
+        trendsData: trends,
+        trendSummary: analysis.trendSummary,
+        trendConfidence: analysis.trendConfidence,
+        firstMove: analysis.firstMove,
+        firstMoveReason: analysis.firstMoveReason,
       }
       
       setMarketIntelResult(result)
@@ -707,6 +725,69 @@ export default function ClinicsControlPage() {
                       </div>
                     </div>
 
+                    {/* Local Trends Signal */}
+                    {marketIntelResult.trendsData && (
+                      <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="w-5 h-5 text-primary" />
+                            <h3 className="text-base font-semibold text-white">Local Trends Signal</h3>
+                          </div>
+                          <span
+                            className={clsx(
+                              'px-2.5 py-1 rounded-full text-xs font-medium',
+                              marketIntelResult.trendsData.trendDirection === 'RISING' && 'bg-status-live/10 text-status-live',
+                              marketIntelResult.trendsData.trendDirection === 'STABLE' && 'bg-gray-500/10 text-gray-400',
+                              marketIntelResult.trendsData.trendDirection === 'FALLING' && 'bg-status-offline/10 text-status-offline'
+                            )}
+                          >
+                            {marketIntelResult.trendsData.trendDirection}
+                          </span>
+                        </div>
+                        
+                        <p className="text-xs text-gray-400 mb-3">
+                          Service Line: <span className="text-white font-medium">{marketIntelResult.trendsData.serviceLine}</span> in{' '}
+                          <span className="text-white font-medium">{marketIntelResult.trendsData.region}</span>
+                        </p>
+
+                        {marketIntelResult.trendsData.risingQueries.length > 0 && (
+                          <div className="mb-3">
+                            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                              Top Rising Queries
+                            </h4>
+                            <div className="space-y-1">
+                              {marketIntelResult.trendsData.risingQueries.slice(0, 3).map((q, idx) => (
+                                <div key={idx} className="text-xs text-gray-300 flex items-start gap-1">
+                                  <span className="text-primary">↗</span>
+                                  <span>{q.query}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {marketIntelResult.trendSummary && (
+                          <div className="pt-3 border-t border-dark-border">
+                            <p className="text-xs text-gray-300 mb-2">
+                              <span className="font-semibold text-gray-400">AI view:</span>{' '}
+                              {marketIntelResult.trendSummary.slice(0, 150)}{marketIntelResult.trendSummary.length > 150 ? '...' : ''}
+                            </p>
+                          </div>
+                        )}
+
+                        {marketIntelResult.firstMove && (
+                          <div className="mt-3 pt-3 border-t border-dark-border bg-primary/5 -m-5 mt-3 p-3 rounded-b-lg">
+                            <p className="text-xs text-gray-400 mb-1">
+                              <span className="font-semibold text-primary">First move:</span>
+                            </p>
+                            <p className="text-xs text-white leading-relaxed">
+                              {marketIntelResult.firstMove}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Region Demand Snapshot */}
                     <div className="bg-dark-accent border border-dark-border rounded-lg">
                       <div className="p-4 border-b border-dark-border">
@@ -726,15 +807,30 @@ export default function ClinicsControlPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-dark-border">
-                            {marketIntelResult.regionDemand.slice(0, 8).map((rd, idx) => (
+                            {marketIntelResult.regionDemand.slice(0, 8).map((rd, idx) => {
+                              const isTrendAligned = marketIntelResult.trendsData?.topRegions.some(
+                                (tr) => tr.region === rd.region || tr.region.includes(rd.region)
+                              )
+                              const isSelectedRegion = selectedClinic?.state === rd.region
+                              
+                              return (
                               <tr
                                 key={idx}
                                 className={clsx(
                                   'hover:bg-dark-hover transition-colors',
-                                  selectedClinic?.state === rd.region && 'bg-primary/10 border-l-4 border-primary'
+                                  isSelectedRegion && 'bg-primary/10 border-l-4 border-primary'
                                 )}
                               >
-                                <td className="px-4 py-3 text-sm text-white font-medium">{rd.region}</td>
+                                <td className="px-4 py-3 text-sm text-white font-medium">
+                                  <div className="flex items-center gap-2">
+                                    {rd.region}
+                                    {isTrendAligned && (
+                                      <span className="px-1.5 py-0.5 bg-purple-500/20 border border-purple-500/40 rounded text-xs text-purple-300">
+                                        Trend-aligned
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="px-4 py-3 text-sm text-gray-300">{rd.serviceLine}</td>
                                 <td className="px-4 py-3 text-sm">
                                   <div className="flex items-center gap-2">
@@ -764,7 +860,8 @@ export default function ClinicsControlPage() {
                                   </span>
                                 </td>
                               </tr>
-                            ))}
+                            )
+                            }))}
                           </tbody>
                         </table>
                       </div>
