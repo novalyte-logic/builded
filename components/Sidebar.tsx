@@ -278,6 +278,19 @@ const navGroups: NavGroup[] = [
         ],
       },
       {
+        name: 'Dealflow Console',
+        href: '/admin/dealflow',
+        icon: Target,
+        description: 'Turn MCP intelligence into paying clients. Every day: targets + scripts → sales.',
+        howTo:
+          'Export dealflow batches for high-demand regions, get ranked clinics with ready outreach scripts, and track your sales pipeline.',
+        examples: [
+          'Export TRT clinics in Texas with outreach packs',
+          'Track email/LinkedIn/call outreach status',
+          'Close 1-2 clinics before December',
+        ],
+      },
+      {
         name: 'Demand & Opportunities',
         href: '/admin/insights/demand',
         icon: Target,
