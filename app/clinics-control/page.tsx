@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Building2, Plus, AlertTriangle, ChevronUp, ChevronDown, Search } from 'lucide-react'
+import { Building2, Plus, AlertTriangle, ChevronUp, ChevronDown, Search, Sparkles, TrendingUp, Target, ExternalLink, MapPin } from 'lucide-react'
+import Link from 'next/link'
 import clsx from 'clsx'
 import StatusBadge from '@/components/StatusBadge'
 import ClinicEditor from '@/components/clinics/ClinicEditor'
@@ -9,6 +10,39 @@ import { ClinicProfile } from '@/lib/types/clinic'
 
 type SortField = 'name' | 'location' | 'status' | 'price_band' | 'updated_at'
 type SortDirection = 'asc' | 'desc'
+
+interface RegionDemand {
+  region: string
+  serviceLine: string
+  demandIndex: number
+  trend: 'Rising' | 'Stable' | 'Falling'
+  sampleSize?: number
+}
+
+interface TargetClinic {
+  clinic_id: string
+  name: string
+  city: string
+  state: string
+  serviceLines: string[]
+  why_target: string
+}
+
+interface MarketIntelResult {
+  interpretedQuestion: string
+  topRegions: Array<{ region: string; reason: string; suggestedBudgetShare: number }>
+  targetClinics: TargetClinic[]
+  primaryMove: string
+  secondaryMoves: string[]
+  regionDemand: RegionDemand[]
+}
+
+const QUICK_ACTIONS = [
+  "Where are TRT clinics needing patients?",
+  "Where are weight loss clinics needing patients?",
+  "Which clinics in Texas should we send TRT leads to?",
+  "Which regions are best for IV therapy ads this month?"
+]
 
 export default function ClinicsControlPage() {
   const [selectedClinicId, setSelectedClinicId] = useState<string | null>(null)
@@ -24,6 +58,13 @@ export default function ClinicsControlPage() {
   // Sorting
   const [sortField, setSortField] = useState<SortField>('updated_at')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  
+  // Market Intel state
+  const [showMarketIntel, setShowMarketIntel] = useState(true)
+  const [marketQuery, setMarketQuery] = useState('')
+  const [scanningMarket, setScanningMarket] = useState(false)
+  const [marketIntelResult, setMarketIntelResult] = useState<MarketIntelResult | null>(null)
+  const [marketIntelError, setMarketIntelError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchClinics()
@@ -142,6 +183,112 @@ export default function ClinicsControlPage() {
     ) : (
       <ChevronDown className="w-4 h-4" />
     )
+  }
+
+  // Get selected clinic object
+  const selectedClinic = clinics.find((c) => c.id === selectedClinicId) || null
+
+  // Handle market intelligence scan
+  const handleMarketScan = async (questionOverride?: string) => {
+    let question = questionOverride || marketQuery.trim()
+    
+    // Auto-generate question if none provided and clinic is selected
+    if (!question && selectedClinic) {
+      const serviceText = selectedClinic.specialties.slice(0, 2).join(' and ')
+      question = `Does ${selectedClinic.city}, ${selectedClinic.state} need more ${serviceText} ads right now for ${selectedClinic.name}?`
+      setMarketQuery(question)
+    }
+    
+    if (!question) {
+      setMarketIntelError('Please enter a question or select a clinic')
+      return
+    }
+
+    setScanningMarket(true)
+    setMarketIntelError(null)
+
+    try {
+      // Infer service line and region from question and selected clinic
+      const questionLower = question.toLowerCase()
+      let serviceLine = ''
+      let region = ''
+      
+      // Infer service line
+      if (questionLower.includes('trt') || questionLower.includes('testosterone')) {
+        serviceLine = 'TRT'
+      } else if (questionLower.includes('weight loss') || questionLower.includes('glp')) {
+        serviceLine = 'WEIGHT_LOSS'
+      } else if (questionLower.includes('iv therapy') || questionLower.includes('iv ')) {
+        serviceLine = 'IV_THERAPY'
+      } else if (selectedClinic) {
+        // Infer from selected clinic's service lines
+        if (selectedClinic.specialties.includes('TRT')) serviceLine = 'TRT'
+        else if (selectedClinic.specialties.includes('GLP-1')) serviceLine = 'WEIGHT_LOSS'
+        else if (selectedClinic.specialties.includes('IV Therapy')) serviceLine = 'IV_THERAPY'
+      }
+      
+      // Infer region
+      if (questionLower.includes('texas') || questionLower.includes(' tx')) {
+        region = 'TX'
+      } else if (questionLower.includes('florida') || questionLower.includes(' fl')) {
+        region = 'FL'
+      } else if (questionLower.includes('california') || questionLower.includes(' ca')) {
+        region = 'CA'
+      } else if (selectedClinic && selectedClinic.state) {
+        region = selectedClinic.state
+      }
+
+      // Call MCP orchestration
+      const response = await fetch('/api/admin/mcp/market-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          tool: 'orchestrate',
+          params: { serviceLine, region },
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Market intelligence scan failed')
+      }
+
+      const data = await response.json()
+      
+      // Map to result format
+      const { regionDemand, clinicMatches, analysis } = data
+      
+      const result: MarketIntelResult = {
+        interpretedQuestion: analysis.interpretedQuestion,
+        topRegions: analysis.topRegions,
+        targetClinics: analysis.targetClinics.map((tc: any) => ({
+          ...tc,
+          city: clinicMatches.find((cm: any) => cm.clinic_id === tc.clinic_id)?.city || '',
+          serviceLines: clinicMatches.find((cm: any) => cm.clinic_id === tc.clinic_id)?.service_lines || [],
+        })),
+        primaryMove: analysis.primaryMove,
+        secondaryMoves: analysis.secondaryMoves,
+        regionDemand: regionDemand.map((rd: any) => ({
+          region: rd.region,
+          serviceLine: rd.serviceLine,
+          demandIndex: rd.demand_index,
+          trend: rd.trend === 'RISING' ? 'Rising' : rd.trend === 'FALLING' ? 'Falling' : 'Stable',
+          sampleSize: rd.sample_size,
+        })),
+      }
+      
+      setMarketIntelResult(result)
+    } catch (error) {
+      console.error('Market scan error:', error)
+      setMarketIntelError('Market scan failed. Try again or refine your question.')
+    } finally {
+      setScanningMarket(false)
+    }
+  }
+
+  const handleQuickAction = (action: string) => {
+    setMarketQuery(action)
+    handleMarketScan(action)
   }
 
   return (
@@ -400,9 +547,295 @@ export default function ClinicsControlPage() {
           </div>
         </div>
 
-        {/* Right: Editor */}
+        {/* Right: Market Intel / Editor Toggle */}
         <div className="lg:col-span-2">
-          {showCreate ? (
+          {/* Tab Switcher */}
+          {!showCreate && (
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setShowMarketIntel(true)}
+                className={clsx(
+                  'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  showMarketIntel
+                    ? 'bg-primary text-white'
+                    : 'bg-dark-surface border border-dark-border text-gray-400 hover:text-white'
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4" />
+                  Market Intel
+                </div>
+              </button>
+              {selectedClinicId && (
+                <button
+                  onClick={() => setShowMarketIntel(false)}
+                  className={clsx(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    !showMarketIntel
+                      ? 'bg-primary text-white'
+                      : 'bg-dark-surface border border-dark-border text-gray-400 hover:text-white'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    Edit Clinic
+                  </div>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Market Intel Panel */}
+          {showMarketIntel && !showCreate ? (
+            <div className="bg-dark-surface border border-dark-border rounded-lg">
+              {/* Header */}
+              <div className="p-6 border-b border-dark-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-6 h-6 text-primary" />
+                  <h2 className="text-xl font-semibold text-white">Clinic Market Intel</h2>
+                </div>
+                <p className="text-sm text-gray-400">Ask the market, not a spreadsheet.</p>
+                
+                {selectedClinic && (
+                  <div className="mt-3 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+                    <p className="text-xs text-gray-300">
+                      <span className="font-semibold text-primary">Selected clinic:</span>{' '}
+                      {selectedClinic.name} — Ask: "Does this clinic's region need more ads?"
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Question Bar */}
+              <div className="p-6 border-b border-dark-border">
+                <div className="flex gap-3 mb-4">
+                  <input
+                    type="text"
+                    value={marketQuery}
+                    onChange={(e) => setMarketQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleMarketScan()}
+                    placeholder="Ask: 'Where are weight loss clinics needing patients?' or 'Which TRT clinics in Texas should we target?'"
+                    className="flex-1 bg-dark-accent border border-dark-border rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary text-sm"
+                  />
+                  <button
+                    onClick={() => handleMarketScan()}
+                    disabled={scanningMarket}
+                    className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {scanningMarket ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Scanning...
+                      </>
+                    ) : (
+                      <>
+                        <TrendingUp className="w-4 h-4" />
+                        Scan
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_ACTIONS.map((action, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleQuickAction(action)}
+                      className="px-3 py-1.5 bg-dark-accent border border-dark-border rounded-full text-xs text-gray-300 hover:text-white hover:border-primary transition-colors"
+                    >
+                      {action}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Results */}
+              <div className="p-6 space-y-6 max-h-[calc(100vh-400px)] overflow-y-auto">
+                {marketIntelError && (
+                  <div className="p-4 bg-status-offline/10 border border-status-offline/30 rounded-lg">
+                    <p className="text-sm text-status-offline">{marketIntelError}</p>
+                  </div>
+                )}
+
+                {!marketIntelResult && !scanningMarket && !marketIntelError && (
+                  <div className="text-center py-12">
+                    <TrendingUp className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-white mb-2">
+                      Select a clinic or ask a question
+                    </h3>
+                    <p className="text-sm text-gray-400">
+                      Get AI-powered market intelligence to see demand, target clinics, and recommended moves.
+                    </p>
+                  </div>
+                )}
+
+                {scanningMarket && (
+                  <div className="space-y-4">
+                    <div className="bg-dark-accent rounded-lg p-6 animate-pulse">
+                      <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+                      <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+                    </div>
+                    <div className="bg-dark-accent rounded-lg p-6 animate-pulse">
+                      <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
+                      <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+                    </div>
+                  </div>
+                )}
+
+                {marketIntelResult && (
+                  <>
+                    {/* AI Market Briefing */}
+                    <div className="bg-gradient-to-r from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="w-5 h-5 text-primary" />
+                        <h3 className="text-lg font-semibold text-white">AI Market Briefing</h3>
+                      </div>
+                      <p className="text-sm text-gray-400 mb-4 italic">"{marketIntelResult.interpretedQuestion}"</p>
+                      <div className="bg-dark-surface/80 border border-primary/20 rounded-lg p-4 mb-4">
+                        <p className="text-sm font-semibold text-white leading-relaxed">
+                          {marketIntelResult.primaryMove}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {marketIntelResult.secondaryMoves.map((move, idx) => (
+                          <div key={idx} className="flex items-start gap-2 text-sm text-gray-300">
+                            <span className="text-primary font-bold mt-0.5">{idx + 1}.</span>
+                            <span>{move}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Region Demand Snapshot */}
+                    <div className="bg-dark-accent border border-dark-border rounded-lg">
+                      <div className="p-4 border-b border-dark-border">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-5 h-5 text-primary" />
+                          <h3 className="text-lg font-semibold text-white">Region Demand Snapshot</h3>
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-dark-surface border-b border-dark-border">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Region</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Service</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Demand</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Trend</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-dark-border">
+                            {marketIntelResult.regionDemand.slice(0, 8).map((rd, idx) => (
+                              <tr
+                                key={idx}
+                                className={clsx(
+                                  'hover:bg-dark-hover transition-colors',
+                                  selectedClinic?.state === rd.region && 'bg-primary/10 border-l-4 border-primary'
+                                )}
+                              >
+                                <td className="px-4 py-3 text-sm text-white font-medium">{rd.region}</td>
+                                <td className="px-4 py-3 text-sm text-gray-300">{rd.serviceLine}</td>
+                                <td className="px-4 py-3 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 bg-dark-surface rounded-full h-2 max-w-[60px]">
+                                      <div
+                                        className={clsx(
+                                          'h-2 rounded-full',
+                                          rd.demandIndex >= 85 ? 'bg-status-live' : 
+                                          rd.demandIndex >= 70 ? 'bg-status-degraded' : 'bg-gray-500'
+                                        )}
+                                        style={{ width: `${rd.demandIndex}%` }}
+                                      ></div>
+                                    </div>
+                                    <span className="text-white font-medium">{rd.demandIndex}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  <span
+                                    className={clsx(
+                                      'px-2 py-1 rounded text-xs font-medium',
+                                      rd.trend === 'Rising' && 'bg-status-live/10 text-status-live',
+                                      rd.trend === 'Stable' && 'bg-gray-500/10 text-gray-400',
+                                      rd.trend === 'Falling' && 'bg-status-offline/10 text-status-offline'
+                                    )}
+                                  >
+                                    {rd.trend}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Target Clinics */}
+                    <div className="bg-dark-accent border border-dark-border rounded-lg">
+                      <div className="p-4 border-b border-dark-border">
+                        <div className="flex items-center gap-2">
+                          <Target className="w-5 h-5 text-primary" />
+                          <h3 className="text-lg font-semibold text-white">Target Clinics</h3>
+                        </div>
+                      </div>
+                      <div className="divide-y divide-dark-border max-h-[400px] overflow-y-auto">
+                        {marketIntelResult.targetClinics.map((tc, idx) => {
+                          const isSelected = selectedClinic?.id === tc.clinic_id
+                          return (
+                            <div
+                              key={idx}
+                              className={clsx(
+                                'p-4 hover:bg-dark-hover transition-colors',
+                                isSelected && 'bg-primary/10 border-l-4 border-primary'
+                              )}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <h4 className="text-sm font-semibold text-white">
+                                    {tc.name}
+                                    {isSelected && (
+                                      <span className="ml-2 text-xs px-2 py-0.5 bg-primary/20 border border-primary/40 rounded-full text-primary">
+                                        Your selected clinic
+                                      </span>
+                                    )}
+                                  </h4>
+                                  <p className="text-xs text-gray-400 mt-0.5">
+                                    {tc.city}, {tc.state}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {tc.serviceLines.map((service, sidx) => (
+                                  <span
+                                    key={sidx}
+                                    className="text-xs px-1.5 py-0.5 bg-dark-surface rounded text-gray-400"
+                                  >
+                                    {service}
+                                  </span>
+                                ))}
+                              </div>
+                              <p className="text-xs text-primary">→ {tc.why_target}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Deep Link */}
+                    <div className="p-4 bg-dark-accent border border-dark-border rounded-lg">
+                      <Link
+                        href={`/admin/market-intelligence?q=${encodeURIComponent(marketQuery)}`}
+                        className="flex items-center gap-2 text-sm text-primary hover:underline"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Open in Market Intelligence Console
+                      </Link>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : showCreate ? (
             <ClinicEditor
               clinicId={null}
               onSave={() => {
@@ -420,14 +853,7 @@ export default function ClinicsControlPage() {
               }}
               onCancel={() => setSelectedClinicId(null)}
             />
-          ) : (
-            <div className="bg-dark-surface border border-dark-border rounded-lg p-12 text-center h-full flex items-center justify-center">
-              <div>
-                <Building2 className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">Select a clinic to edit or create a new one</p>
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
