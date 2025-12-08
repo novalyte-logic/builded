@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+.next/cache
+.next/trace
+.next/*.map
+.DS_Store
+.git
+.gitignore
+.dockerignore
