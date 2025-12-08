@@ -265,6 +265,19 @@ const navGroups: NavGroup[] = [
         examples: ['Execute internal SQL', 'Test Vertex prompts', 'Inspect analytics data quickly'],
       },
       {
+        name: 'Market Intelligence',
+        href: '/admin/market-intelligence',
+        icon: TrendingUp,
+        description: 'Natural language market analysis for demand hotspots and clinic targeting',
+        howTo:
+          'Ask questions about TRT/Weight Loss/IV demand by region, get clinic lists, and receive AI-powered deployment guidance.',
+        examples: [
+          'Find GLP-1 demand hotspots',
+          'List clinics needing TRT patients in Texas',
+          'Get guidance on where to deploy ads',
+        ],
+      },
+      {
         name: 'Demand & Opportunities',
         href: '/admin/insights/demand',
         icon: Target,
