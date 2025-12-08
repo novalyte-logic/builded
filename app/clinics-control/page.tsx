@@ -1010,7 +1010,7 @@ export default function ClinicsControlPage() {
                                 </td>
                               </tr>
                             )
-                            }))}
+                            })}
                           </tbody>
                         </table>
                       </div>
