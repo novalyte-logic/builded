@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Building2, Plus, AlertTriangle, ChevronUp, ChevronDown, Search, Sparkles, TrendingUp, Target, ExternalLink, MapPin } from 'lucide-react'
+import { Building2, Plus, AlertTriangle, AlertCircle, ChevronUp, ChevronDown, Search, Sparkles, TrendingUp, Target, ExternalLink, MapPin } from 'lucide-react'
 import Link from 'next/link'
 import clsx from 'clsx'
 import StatusBadge from '@/components/StatusBadge'
@@ -80,9 +80,25 @@ export default function ClinicsControlPage() {
   const [marketIntelResult, setMarketIntelResult] = useState<MarketIntelResult | null>(null)
   const [marketIntelError, setMarketIntelError] = useState<string | null>(null)
 
+  // Ad Activity & Outreach state
+  const [adsActivity, setAdsActivity] = useState<any>(null)
+  const [outreachStrategy, setOutreachStrategy] = useState<any>(null)
+  const [loadingAdsIntel, setLoadingAdsIntel] = useState(false)
+  const [adsIntelError, setAdsIntelError] = useState<string | null>(null)
+
   useEffect(() => {
     fetchClinics()
   }, [])
+
+  // Fetch ads activity and outreach when clinic is selected
+  useEffect(() => {
+    if (selectedClinicId && selectedClinic) {
+      fetchAdsActivityAndOutreach()
+    } else {
+      setAdsActivity(null)
+      setOutreachStrategy(null)
+    }
+  }, [selectedClinicId, selectedClinic])
 
   const fetchClinics = async () => {
     try {
@@ -201,6 +217,125 @@ export default function ClinicsControlPage() {
 
   // Get selected clinic object
   const selectedClinic = clinics.find((c) => c.id === selectedClinicId) || null
+
+  // Fetch ads activity and outreach strategy
+  const fetchAdsActivityAndOutreach = async () => {
+    if (!selectedClinic) return
+
+    setLoadingAdsIntel(true)
+    setAdsIntelError(null)
+
+    try {
+      // Build clinic profile
+      const clinicProfile = {
+        name: selectedClinic.name,
+        location: {
+          city: selectedClinic.city,
+          state: selectedClinic.state,
+        },
+        serviceLines: selectedClinic.service_lines || [],
+        priceBand: selectedClinic.price_band || '$$',
+        leadStatus: selectedClinic.lead_status || 'actively_accepting',
+      }
+
+      // Determine primary service line
+      const primaryServiceLine = selectedClinic.service_lines?.[0] || 'GENERAL'
+      const serviceLineMap: Record<string, string> = {
+        'TRT': 'TRT',
+        'GLP-1': 'WEIGHT_LOSS',
+        'Weight Loss': 'WEIGHT_LOSS',
+        'IV Therapy': 'IV_THERAPY',
+        'IV': 'IV_THERAPY',
+      }
+      const mappedServiceLine = serviceLineMap[primaryServiceLine] || 'GENERAL'
+
+      // Build region string
+      const region = selectedClinic.state ? `US-${selectedClinic.state}` : undefined
+
+      // Step 1: Fetch ads activity
+      const adsResponse = await fetch('/api/admin/mcp/market-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'ads_intel_clinic_activity',
+          params: {
+            clinicName: selectedClinic.name,
+            domain: selectedClinic.website_url,
+            region,
+            serviceLine: mappedServiceLine,
+          },
+        }),
+      })
+
+      if (!adsResponse.ok) {
+        throw new Error('Failed to fetch ads activity')
+      }
+
+      const adsData = await adsResponse.json()
+      const adsActivityResult = adsData.results
+      setAdsActivity(adsActivityResult)
+
+      // Step 2: Optionally fetch market demand
+      let marketDemand = null
+      if (region && mappedServiceLine !== 'GENERAL') {
+        try {
+          const demandResponse = await fetch('/api/admin/mcp/market-intel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tool: 'bigquery_region_demand',
+              params: {
+                serviceLine: mappedServiceLine,
+              },
+            }),
+          })
+
+          if (demandResponse.ok) {
+            const demandData = await demandResponse.json()
+            const regionDemand = demandData.results.find((r: any) => 
+              r.region === selectedClinic.state || r.region.includes(selectedClinic.state)
+            )
+            if (regionDemand) {
+              marketDemand = {
+                region: regionDemand.region,
+                serviceLine: regionDemand.serviceLine,
+                demandIndex: regionDemand.demand_index,
+                trend: regionDemand.trend,
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to fetch market demand, continuing without it:', error)
+        }
+      }
+
+      // Step 3: Generate outreach strategy
+      const outreachResponse = await fetch('/api/admin/mcp/market-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'vertex_clinic_outreach_brain',
+          params: {
+            clinicProfile,
+            adsActivity: adsActivityResult,
+            marketDemand,
+          },
+        }),
+      })
+
+      if (!outreachResponse.ok) {
+        throw new Error('Failed to generate outreach strategy')
+      }
+
+      const outreachData = await outreachResponse.json()
+      setOutreachStrategy(outreachData.results)
+    } catch (error) {
+      console.error('Error fetching ads activity and outreach:', error)
+      setAdsIntelError(error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      setLoadingAdsIntel(false)
+    }
+  }
 
   // Handle market intelligence scan
   const handleMarketScan = async (questionOverride?: string) => {
@@ -944,6 +1079,217 @@ export default function ClinicsControlPage() {
                   </>
                 )}
               </div>
+
+              {/* Ad Activity & Outreach Panel */}
+              {selectedClinic && (
+                <div className="bg-dark-surface border border-dark-border rounded-lg">
+                  <div className="p-6 border-b border-dark-border">
+                    <div className="flex items-center gap-2">
+                      <Target className="w-5 h-5 text-primary" />
+                      <h2 className="text-xl font-semibold text-white">Ad Activity & Outreach</h2>
+                    </div>
+                    <p className="text-sm text-gray-400 mt-1">See their ads strategy and get AI-generated outreach steps</p>
+                  </div>
+
+                  <div className="p-6 space-y-6 max-h-[calc(100vh-400px)] overflow-y-auto">
+                    {loadingAdsIntel && (
+                      <div className="space-y-4">
+                        <div className="bg-dark-accent rounded-lg p-6 animate-pulse">
+                          <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+                          <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {adsIntelError && (
+                      <div className="p-4 bg-status-offline/10 border border-status-offline/30 rounded-lg">
+                        <p className="text-sm text-status-offline">{adsIntelError}</p>
+                      </div>
+                    )}
+
+                    {!loadingAdsIntel && adsActivity && outreachStrategy && (
+                      <>
+                        {/* Ad Activity Snapshot */}
+                        <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
+                          <h3 className="text-lg font-semibold text-white mb-4">Ad Activity Snapshot</h3>
+                          
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <span className={clsx(
+                                'px-3 py-1 rounded-full text-xs font-medium',
+                                adsActivity.isRunningAds 
+                                  ? 'bg-status-live/10 text-status-live' 
+                                  : 'bg-gray-500/10 text-gray-400'
+                              )}>
+                                {adsActivity.isRunningAds ? 'Running ads' : 'No active ads detected'}
+                              </span>
+                            </div>
+
+                            {adsActivity.isRunningAds ? (
+                              <>
+                                <div>
+                                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                                    Platforms
+                                  </h4>
+                                  <div className="flex flex-wrap gap-2">
+                                    {adsActivity.platforms.map((p: any, idx: number) => (
+                                      <span
+                                        key={idx}
+                                        className="px-3 py-1 bg-primary/20 border border-primary/40 rounded-full text-sm text-white"
+                                      >
+                                        {p.platform} ({p.activeCampaignCount} campaigns)
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                                    Regions Targeted
+                                  </h4>
+                                  <div className="flex flex-wrap gap-2">
+                                    {adsActivity.regionsTargeted.slice(0, 3).map((r: any, idx: number) => (
+                                      <span
+                                        key={idx}
+                                        className="px-2 py-1 bg-dark-surface border border-dark-border rounded text-xs text-gray-300"
+                                      >
+                                        {r.region} ({r.intensity})
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <p className="text-sm text-gray-300 italic">
+                                No active campaigns detected. Great opportunity to be their growth partner early.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Creative & Offer Summary */}
+                        {adsActivity.isRunningAds && adsActivity.creativesSummary.length > 0 && (
+                          <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
+                            <h3 className="text-lg font-semibold text-white mb-4">Creative & Offer Summary</h3>
+                            <ul className="space-y-2">
+                              {adsActivity.creativesSummary.map((creative: any, idx: number) => (
+                                <li key={idx} className="text-sm text-gray-300">
+                                  <span className="text-primary">•</span>{' '}
+                                  Leading with <span className="text-white font-medium">"{creative.theme}"</span> messaging.
+                                  {creative.offerType && (
+                                    <> Offer: <span className="text-white font-medium">{creative.offerType}</span>.</>
+                                  )}
+                                  {creative.ctaPatterns.length > 0 && (
+                                    <> Primary CTA: <span className="text-white font-medium">{creative.ctaPatterns[0]}</span>.</>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                            {adsActivity.funnelExamples.length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-dark-border">
+                                <p className="text-xs text-gray-400">
+                                  Landing page: {adsActivity.funnelExamples[0].funnelNotes}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Outreach Strategy */}
+                        <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
+                          <h3 className="text-lg font-semibold text-white mb-4">Outreach Strategy</h3>
+                          
+                          <div className="mb-4">
+                            <p className="text-sm text-white font-medium mb-2">{outreachStrategy.fitAssessment}</p>
+                            <p className="text-sm text-gray-300">{outreachStrategy.whyNow}</p>
+                          </div>
+
+                          <div>
+                            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                              Steps
+                            </h4>
+                            <ol className="space-y-2">
+                              {outreachStrategy.outreachSteps.map((step: string, idx: number) => (
+                                <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                                  <span className="text-primary font-bold mt-0.5">{idx + 1}.</span>
+                                  <span>{step}</span>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        </div>
+
+                        {/* AI-Generated First Message */}
+                        <div className="bg-gradient-to-r from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-white">First Message Draft</h3>
+                            <button
+                              onClick={fetchAdsActivityAndOutreach}
+                              className="px-3 py-1.5 bg-primary/20 border border-primary/40 rounded-lg text-xs text-primary hover:bg-primary/30 transition-colors"
+                            >
+                              Regenerate Variant
+                            </button>
+                          </div>
+
+                          {outreachStrategy.firstMessage.channel === 'email' && (
+                            <div className="mb-3">
+                              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                                Subject Line
+                              </label>
+                              <div className="mt-1 p-3 bg-dark-surface border border-dark-border rounded-lg text-sm text-white font-medium">
+                                {outreachStrategy.firstMessage.subjectLine}
+                              </div>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">
+                              Message Body
+                            </label>
+                            <div className="mt-1 p-4 bg-dark-surface border border-dark-border rounded-lg">
+                              <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
+                                {outreachStrategy.firstMessage.body}
+                              </pre>
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(outreachStrategy.firstMessage.body)
+                              }}
+                              className="mt-2 px-3 py-1.5 bg-dark-accent border border-dark-border rounded-lg text-xs text-gray-300 hover:text-white hover:border-primary transition-colors"
+                            >
+                              Copy to Clipboard
+                            </button>
+                          </div>
+
+                          {outreachStrategy.alternateOpeners.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-primary/20">
+                              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                                Alternate Openers
+                              </h4>
+                              <ul className="space-y-1">
+                                {outreachStrategy.alternateOpeners.map((opener: string, idx: number) => (
+                                  <li key={idx} className="text-xs text-gray-300 italic">
+                                    "{opener}"
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {!loadingAdsIntel && !adsActivity && !adsIntelError && (
+                      <div className="text-center py-8">
+                        <Target className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                        <p className="text-sm text-gray-400">
+                          Ad activity and outreach data will load automatically when a clinic is selected.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : showCreate ? (
             <ClinicEditor

@@ -12,6 +12,8 @@ export * from './bigquery-region-demand'
 export * from './bigquery-clinic-search'
 export * from './google-trends-service-interest'
 export * from './vertex-market-brain'
+export * from './ads-intel-clinic-activity'
+export * from './vertex-clinic-outreach-brain'
 
 export const MCP_SERVER_NAME = 'novalyte-market-intel-mcp'
 export const MCP_SERVER_VERSION = '1.1.0'
@@ -24,6 +26,8 @@ export const MCP_TOOLS = [
   'bigquery_clinic_search',
   'google_trends_service_line_interest',
   'vertex_market_brain',
+  'ads_intel_clinic_activity',
+  'vertex_clinic_outreach_brain',
 ] as const
 
 export type MCPTool = typeof MCP_TOOLS[number]

@@ -12,6 +12,8 @@ import { queryRegionDemand, ServiceLine as DemandServiceLine } from '@/lib/mcp/m
 import { searchClinics } from '@/lib/mcp/market-intel/bigquery-clinic-search'
 import { analyzeMarket } from '@/lib/mcp/market-intel/vertex-market-brain'
 import { fetchGoogleTrends, TrendServiceLine } from '@/lib/mcp/market-intel/google-trends-service-interest'
+import { fetchClinicAdsActivity } from '@/lib/mcp/market-intel/ads-intel-clinic-activity'
+import { generateOutreachStrategy } from '@/lib/mcp/market-intel/vertex-clinic-outreach-brain'
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,8 +31,14 @@ export async function POST(request: NextRequest) {
       case 'google_trends_service_line_interest':
         return await handleGoogleTrends(params)
       
+      case 'ads_intel_clinic_activity':
+        return await handleAdsIntel(params)
+      
       case 'vertex_market_brain':
         return await handleMarketBrain(params)
+      
+      case 'vertex_clinic_outreach_brain':
+        return await handleOutreachBrain(params)
       
       case 'orchestrate':
         // Full orchestration: run all tools including trends
@@ -38,7 +46,7 @@ export async function POST(request: NextRequest) {
       
       default:
         return NextResponse.json(
-          { error: 'Invalid tool specified', availableTools: ['bigquery_region_demand', 'bigquery_clinic_search', 'google_trends_service_line_interest', 'vertex_market_brain', 'orchestrate'] },
+          { error: 'Invalid tool specified', availableTools: ['bigquery_region_demand', 'bigquery_clinic_search', 'google_trends_service_line_interest', 'ads_intel_clinic_activity', 'vertex_market_brain', 'vertex_clinic_outreach_brain', 'orchestrate'] },
           { status: 400 }
         )
     }
@@ -120,6 +128,32 @@ async function handleGoogleTrends(params: any) {
 }
 
 /**
+ * Handle ads_intel_clinic_activity tool call
+ */
+async function handleAdsIntel(params: any) {
+  const { clinicName, domain, region, serviceLine } = params
+
+  if (!clinicName) {
+    return NextResponse.json(
+      { error: 'clinicName is required' },
+      { status: 400 }
+    )
+  }
+
+  const results = await fetchClinicAdsActivity({
+    clinicName,
+    domain,
+    region,
+    serviceLine,
+  })
+
+  return NextResponse.json({
+    tool: 'ads_intel_clinic_activity',
+    results,
+  })
+}
+
+/**
  * Handle vertex_market_brain tool call
  */
 async function handleMarketBrain(params: any) {
@@ -142,6 +176,32 @@ async function handleMarketBrain(params: any) {
 
   return NextResponse.json({
     tool: 'vertex_market_brain',
+    results,
+  })
+}
+
+/**
+ * Handle vertex_clinic_outreach_brain tool call
+ */
+async function handleOutreachBrain(params: any) {
+  const { clinicProfile, adsActivity, marketDemand, novalytePositioning } = params
+
+  if (!clinicProfile || !adsActivity) {
+    return NextResponse.json(
+      { error: 'clinicProfile and adsActivity are required' },
+      { status: 400 }
+    )
+  }
+
+  const results = await generateOutreachStrategy({
+    clinicProfile,
+    adsActivity,
+    marketDemand,
+    novalytePositioning,
+  })
+
+  return NextResponse.json({
+    tool: 'vertex_clinic_outreach_brain',
     results,
   })
 }
