@@ -1,84 +1,62 @@
-/**
- * Vertex AI (Gemini) Service Layer
- * 
- * Server-side only. Provides AI intelligence and predictions.
- * 
- * NOTE: Currently using placeholder implementations.
- * To enable real Vertex AI:
- * 1. Install: npm install @google-cloud/vertexai
- * 2. Set environment variables: VERTEX_AI_PROJECT_ID, VERTEX_AI_LOCATION
- * 3. Replace placeholder functions below with actual Vertex AI SDK calls
- */
+import 'server-only'
 
-// Placeholder: Replace with actual Vertex AI import when package is installed
-// import { VertexAI } from '@google-cloud/vertexai'
+import { VertexAI } from '@google-cloud/vertexai'
 
-const MODEL_NAME = process.env.VERTEX_AI_MODEL || 'gemini-1.5-pro'
+const MODEL_NAME =
+  process.env.VERTEX_MODEL_NAME ||
+  process.env.VERTEX_AI_MODEL ||
+  process.env.VERTEX_MODEL ||
+  'gemini-1.5-pro'
+const PROJECT_ID =
+  process.env.VERTEX_PROJECT_ID ||
+  process.env.VERTEX_AI_PROJECT_ID ||
+  process.env.GOOGLE_CLOUD_PROJECT ||
+  process.env.BIGQUERY_PROJECT_ID ||
+  'novalyte-analytics-project'
+const LOCATION =
+  process.env.VERTEX_LOCATION || process.env.VERTEX_AI_LOCATION || 'us-central1'
+
+const vertexAI = new VertexAI({
+  project: PROJECT_ID,
+  location: LOCATION,
+})
+const jsonModel = vertexAI.preview.getGenerativeModel({
+  model: MODEL_NAME,
+  generationConfig: {
+    responseMimeType: 'application/json',
+  },
+})
+const textModel = vertexAI.preview.getGenerativeModel({
+  model: MODEL_NAME,
+})
 
 /**
  * Helper function to call Gemini with structured prompts
- * 
- * PLACEHOLDER IMPLEMENTATION - Replace with actual Vertex AI SDK calls
  */
-async function callGemini(
+export async function callGemini(
   systemPrompt: string,
   userPrompt: string,
   responseFormat: 'json' | 'text' = 'json'
 ): Promise<any> {
-  // TODO: Replace with actual Vertex AI SDK
-  // const vertexAI = new VertexAI({
-  //   project: process.env.VERTEX_AI_PROJECT_ID || 'novalyte-analytics-project',
-  //   location: process.env.VERTEX_AI_LOCATION || 'us-central1',
-  // })
-  // const model = vertexAI.preview.getGenerativeModel({ model: MODEL_NAME })
-  // const result = await model.generateContent(`${systemPrompt}\n\n${userPrompt}`)
-  // return responseFormat === 'json' ? JSON.parse(result.response.text()) : result.response.text()
+  const model = responseFormat === 'json' ? jsonModel : textModel
+  const response = await model.generateContent({
+    contents: [
+      { role: 'system', parts: [{ text: systemPrompt }] },
+      { role: 'user', parts: [{ text: userPrompt }] },
+    ],
+  })
 
-  // Placeholder: Return mock structured response
-  console.log('Vertex AI call (placeholder):', { systemPrompt, userPrompt, responseFormat })
-  
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 100))
+  const text =
+    response.response?.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || '')
+      .join('')
+      .trim() || ''
 
-  if (responseFormat === 'json') {
-    // Return mock JSON structure based on prompt context
-    if (userPrompt.includes('channel metrics') || userPrompt.includes('ROAS')) {
-      return [
-        {
-          platform: 'google_ads',
-          campaign: 'Sample Campaign',
-          recommendation: 'increase',
-          reason: 'High ROAS and conversion rate',
-          suggestedBudgetChange: 15,
-          expectedImpact: 'Expected revenue increase of $5K',
-          confidence: 0.85,
-        },
-      ]
-    }
-    
-    if (userPrompt.includes('weekly') || userPrompt.includes('briefing')) {
-      return {
-        summary: 'Weekly performance shows strong growth in TRT and GLP-1 paths. Marketplace revenue up 12%.',
-        bestCities: [
-          { category: 'TRT', insight: 'Los Angeles showing 45% growth', cities: ['Los Angeles'], recommendations: ['Scale marketing'] },
-        ],
-        underservedMarkets: [],
-        topCategories: [],
-        warnings: [],
-      }
-    }
-
-    // Default mock response
-    return {
-      conversionProbability: 0.75,
-      predictedLTV: 'high',
-      recommendation: 'Route to premium clinic',
-      confidence: 0.85,
-    }
+  if (!text) {
+    throw new Error('Vertex AI returned an empty response')
   }
 
-  // Text response placeholder
-  return 'AI summary placeholder - Replace with actual Vertex AI response'
+  return responseFormat === 'json' ? JSON.parse(text) : text
 }
 
 export type VertexConsoleMode = 'DATA_ANALYST' | 'GROWTH_STRATEGIST' | 'EXPERIMENT_BUILDER'
@@ -473,4 +451,3 @@ Focus on: where profit is really coming from, CAC spikes, clinic risks, expansio
     expansionOpportunities: result.expansionOpportunities || [],
   }
 }
-

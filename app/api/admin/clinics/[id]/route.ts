@@ -9,9 +9,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ClinicProfile } from '@/lib/types/clinic'
 import { createAuditLog, createVersionSnapshot } from '@/lib/services/audit-service'
+import { mockClinics } from '../mockData'
 
-// Mock data store (replace with database)
-const clinics: ClinicProfile[] = []
+// Use shared mock data store (replace with database)
+const clinics = mockClinics
 
 export async function GET(
   request: NextRequest,
@@ -24,7 +25,14 @@ export async function GET(
       return NextResponse.json({ error: 'Clinic not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ clinic })
+    // Serialize dates for JSON response
+    const serializedClinic = {
+      ...clinic,
+      created_at: clinic.created_at.toISOString ? clinic.created_at.toISOString() : clinic.created_at,
+      updated_at: clinic.updated_at.toISOString ? clinic.updated_at.toISOString() : clinic.updated_at,
+    }
+
+    return NextResponse.json({ clinic: serializedClinic })
   } catch (error: any) {
     console.error('Clinic detail API error:', error)
     return NextResponse.json(
@@ -85,7 +93,14 @@ export async function PATCH(
       )
     }
 
-    return NextResponse.json({ clinic: updatedClinic })
+    // Serialize dates for JSON response
+    const serializedClinic = {
+      ...updatedClinic,
+      created_at: updatedClinic.created_at.toISOString ? updatedClinic.created_at.toISOString() : updatedClinic.created_at,
+      updated_at: updatedClinic.updated_at.toISOString ? updatedClinic.updated_at.toISOString() : updatedClinic.updated_at,
+    }
+
+    return NextResponse.json({ clinic: serializedClinic })
   } catch (error: any) {
     console.error('Update clinic error:', error)
     return NextResponse.json(
@@ -126,7 +141,14 @@ export async function DELETE(
       'Clinic soft-deleted (hidden from directory)'
     )
 
-    return NextResponse.json({ message: 'Clinic deleted', clinic: clinics[clinicIndex] })
+    // Serialize dates for JSON response
+    const serializedClinic = {
+      ...clinics[clinicIndex],
+      created_at: clinics[clinicIndex].created_at.toISOString ? clinics[clinicIndex].created_at.toISOString() : clinics[clinicIndex].created_at,
+      updated_at: clinics[clinicIndex].updated_at.toISOString ? clinics[clinicIndex].updated_at.toISOString() : clinics[clinicIndex].updated_at,
+    }
+
+    return NextResponse.json({ message: 'Clinic deleted', clinic: serializedClinic })
   } catch (error: any) {
     console.error('Delete clinic error:', error)
     return NextResponse.json(

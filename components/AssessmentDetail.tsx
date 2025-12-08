@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { X, ExternalLink, Edit, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { useState } from 'react'
+import { X, ExternalLink, Edit, AlertTriangle, CheckCircle, XCircle, Stethoscope, Activity, BrainCircuit } from 'lucide-react'
 
 interface Assessment {
   id: string
@@ -31,54 +30,40 @@ interface Assessment {
     priority: string
     notes: string | null
   } | null
+  patient?: {
+    age: number
+    gender: string
+    bmi?: number
+    state?: string
+    serviceInterest?: string
+  }
+  symptoms?: string[]
+  goals?: string[]
+  lifestyle?: string[]
+  redFlags?: string[]
+  triageSummary?: {
+    clinicalRisk: 'low' | 'moderate' | 'high'
+    conversionPotential: 'low' | 'moderate' | 'high'
+    keySignals: string[]
+    riskFactors: string[]
+    recommendedAction: string
+  }
 }
 
 interface AssessmentDetailProps {
-  assessmentId: string | null
+  assessment: Assessment | null
   onClose: () => void
   onUpdateLead?: () => void
 }
 
 export default function AssessmentDetail({
-  assessmentId,
+  assessment,
   onClose,
   onUpdateLead,
 }: AssessmentDetailProps) {
-  const [assessment, setAssessment] = useState<Assessment | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [showTriageModal, setShowTriageModal] = useState(false)
 
-  useEffect(() => {
-    if (assessmentId) {
-      fetchAssessment()
-    }
-  }, [assessmentId])
-
-  const fetchAssessment = async () => {
-    if (!assessmentId) return
-
-    try {
-      setLoading(true)
-      const response = await fetch(`/api/admin/assessments/${assessmentId}`)
-      if (!response.ok) throw new Error('Failed to fetch assessment')
-
-      const data = await response.json()
-      setAssessment(data.assessment)
-    } catch (error) {
-      console.error('Error fetching assessment:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!assessmentId) return null
-
-  if (loading) {
-    return (
-      <div className="bg-dark-surface border border-dark-border rounded-lg p-6">
-        <div className="text-center text-gray-400">Loading assessment details...</div>
-      </div>
-    )
-  }
+  if (!assessment) return null
 
   if (!assessment) {
     return (
@@ -100,7 +85,7 @@ export default function AssessmentDetail({
   }
 
   return (
-    <div className="bg-dark-surface border border-dark-border rounded-lg">
+    <div className="bg-dark-surface border border-dark-border rounded-lg relative">
       {/* Header */}
       <div className="p-6 border-b border-dark-border">
         <div className="flex items-center justify-between">
@@ -109,6 +94,7 @@ export default function AssessmentDetail({
             <p className="text-sm text-gray-400 mt-1">
               {assessment.flow_type || assessment.path} • {new Date(assessment.created_at).toLocaleString()}
             </p>
+            <p className="text-xs text-gray-500">ID: {assessment.id}</p>
           </div>
           <button
             onClick={onClose}
@@ -119,11 +105,11 @@ export default function AssessmentDetail({
         </div>
       </div>
 
-      <div className="p-6 space-y-6">
-        {/* Status & Qualification */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-gray-400 mb-1">Status</p>
+        <div className="p-6 space-y-6">
+          {/* Status & Qualification */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Status</p>
             <div className="flex items-center gap-2">
               {assessment.status === 'qualified' && (
                 <CheckCircle className="w-4 h-4 text-status-live" />
@@ -169,12 +155,83 @@ export default function AssessmentDetail({
               </span>
             </div>
           )}
-        </div>
+          </div>
 
-        {/* AI Summary */}
-        {assessment.ai_summary_json && (
-          <div>
-            <h4 className="text-sm font-semibold text-white mb-3">AI Summary</h4>
+          {/* Patient Snapshot */}
+          {assessment.patient && (
+            <div className="border border-dark-border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Stethoscope className="w-4 h-4 text-primary" />
+                <h4 className="text-sm font-semibold text-white">Patient Snapshot</h4>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm text-gray-200">
+                <div>Age: {assessment.patient.age}</div>
+                <div>Gender: {assessment.patient.gender}</div>
+                <div>BMI: {assessment.patient.bmi ?? '—'}</div>
+                <div>State: {assessment.patient.state ?? '—'}</div>
+                <div>Service Interest: {assessment.patient.serviceInterest ?? '—'}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Symptoms & Goals */}
+          {(assessment.symptoms || assessment.goals) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="border border-dark-border rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-2">Symptoms</p>
+                <div className="flex flex-wrap gap-2">
+                  {assessment.symptoms?.map((s, idx) => (
+                    <span key={idx} className="px-2 py-1 bg-dark-accent border border-dark-border rounded text-xs text-gray-300">
+                      {s}
+                    </span>
+                  )) || <span className="text-xs text-gray-500">No symptoms listed</span>}
+                </div>
+              </div>
+              <div className="border border-dark-border rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-2">Goals</p>
+                <div className="flex flex-wrap gap-2">
+                  {assessment.goals?.map((g, idx) => (
+                    <span key={idx} className="px-2 py-1 bg-dark-accent border border-dark-border rounded text-xs text-gray-300">
+                      {g}
+                    </span>
+                  )) || <span className="text-xs text-gray-500">No goals listed</span>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Lifestyle & Risks */}
+          {(assessment.lifestyle || assessment.redFlags) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="border border-dark-border rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-2">Lifestyle Factors</p>
+                <div className="flex flex-wrap gap-2">
+                  {assessment.lifestyle?.map((l, idx) => (
+                    <span key={idx} className="px-2 py-1 bg-dark-accent border border-dark-border rounded text-xs text-gray-300">
+                      {l}
+                    </span>
+                  )) || <span className="text-xs text-gray-500">No lifestyle data</span>}
+                </div>
+              </div>
+              <div className="border border-dark-border rounded-lg p-3">
+                <p className="text-xs text-red-400 mb-2 font-semibold">Red Flags</p>
+                <div className="flex flex-wrap gap-2">
+                  {assessment.redFlags?.length
+                    ? assessment.redFlags.map((flag, idx) => (
+                        <span key={idx} className="px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400 font-medium">
+                          ⚠ {flag}
+                        </span>
+                      ))
+                    : <span className="text-xs text-gray-500">No red flags</span>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* AI Summary */}
+          {assessment.ai_summary_json && (
+            <div>
+              <h4 className="text-sm font-semibold text-white mb-3">AI Summary</h4>
             
             {/* Plain English Summary */}
             <div className="mb-4">
@@ -194,7 +251,64 @@ export default function AssessmentDetail({
                     ))}
                   </ul>
                 </div>
-              )}
+          )}
+
+          {/* AI Triage Summary */}
+          {assessment.triageSummary && (
+            <div className="border border-dark-border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Activity className="w-4 h-4 text-primary" />
+                <h4 className="text-sm font-semibold text-white">AI Triage Summary</h4>
+                <button
+                  onClick={() => setShowTriageModal(true)}
+                  className="ml-auto text-xs px-2 py-1 bg-primary/10 text-primary rounded-md hover:bg-primary/20 transition"
+                >
+                  View Full AI Triage Reasoning
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm text-gray-200 mb-3">
+                <div>
+                  Clinical Risk: <span className="font-semibold capitalize">{assessment.triageSummary.clinicalRisk}</span>
+                </div>
+                <div>
+                  Conversion Potential:{' '}
+                  <span className="font-semibold capitalize">{assessment.triageSummary.conversionPotential}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-400 mb-2">Opportunity Signals</p>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
+                    {assessment.triageSummary.keySignals.map((s, idx) => (
+                      <li key={idx}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-2">Risk Factors</p>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
+                    {assessment.triageSummary.riskFactors.map((s, idx) => (
+                      <li key={idx}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs text-gray-400 mb-1">Why this risk & potential</p>
+                <p className="text-sm text-gray-300 mb-3">
+                  {`Risk is ${assessment.triageSummary.clinicalRisk} due to ${
+                    assessment.triageSummary.riskFactors?.[0] || 'available assessment signals'
+                  }. Conversion potential is ${assessment.triageSummary.conversionPotential} because ${
+                    assessment.triageSummary.keySignals?.[0] || 'engagement and fit indicators'
+                  }.`}
+                </p>
+                <p className="text-xs text-gray-400 mb-1">Recommended Action</p>
+                <p className="text-sm text-primary font-semibold">
+                  {assessment.triageSummary.recommendedAction}
+                </p>
+              </div>
+            </div>
+          )}
 
               {assessment.ai_summary_json.keySymptoms.length > 0 && (
                 <div>
@@ -317,7 +431,106 @@ export default function AssessmentDetail({
           </div>
         )}
       </div>
+      {assessment.triageSummary && (
+        <TriageModal
+          open={showTriageModal}
+          onClose={() => setShowTriageModal(false)}
+          summary={assessment.triageSummary}
+          flowType={assessment.flow_type || assessment.path}
+        />
+      )}
     </div>
   )
 }
 
+function TriageModal({
+  open,
+  onClose,
+  summary,
+  flowType,
+}: {
+  open: boolean
+  onClose: () => void
+  summary: NonNullable<Assessment['triageSummary']>
+  flowType: string
+}) {
+  if (!open) return null
+
+  const narrative = `
+Based on the provided assessment, the AI classifies this case as ${summary.clinicalRisk} clinical risk and ${summary.conversionPotential} conversion potential.
+
+Clinical reasoning:
+- ${summary.riskFactors.join('\n- ') || 'No major risks detected.'}
+
+Conversion reasoning:
+- ${summary.keySignals.join('\n- ') || 'Limited positive signals.'}
+
+Recommended action:
+${summary.recommendedAction}
+
+This triage is based on the ${flowType || 'protocol'} flow inputs, patient engagement, and observed symptoms/flags.`
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-2xl rounded-lg bg-dark-surface border border-dark-border shadow-2xl m-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-5 border-b border-dark-border">
+          <div className="flex items-center gap-2">
+            <BrainCircuit className="w-5 h-5 text-primary" />
+            <div>
+              <h3 className="text-lg font-semibold text-white">AI Triage Reasoning</h3>
+              <p className="text-xs text-gray-400">Clinical risk and conversion analysis</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full text-gray-400 hover:bg-dark-hover hover:text-white transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3 text-sm text-gray-200">
+            <div>
+              Clinical Risk:{' '}
+              <span className="font-semibold capitalize">{summary.clinicalRisk}</span>
+            </div>
+            <div>
+              Conversion Potential:{' '}
+              <span className="font-semibold capitalize">{summary.conversionPotential}</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-gray-400 uppercase">Key Opportunity Signals</p>
+            <ul className="list-disc list-inside text-sm text-gray-200 space-y-1">
+              {summary.keySignals.map((s, idx) => (
+                <li key={idx}>{s}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-gray-400 uppercase">Risk / Contraindication Signals</p>
+            <ul className="list-disc list-inside text-sm text-gray-200 space-y-1">
+              {summary.riskFactors.map((s, idx) => (
+                <li key={idx}>{s}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-gray-400 uppercase">Narrative</p>
+            <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{narrative}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-gray-400 uppercase">Recommended Next Step</p>
+            <p className="text-sm text-primary font-semibold">{summary.recommendedAction}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

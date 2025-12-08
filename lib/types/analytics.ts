@@ -70,6 +70,17 @@ export interface RevenueIntelligenceResponse {
   }
 }
 
+export interface AssessmentTriageResult {
+  leadId: string
+  clinicalRiskLevel: 'low' | 'moderate' | 'high'
+  conversionPotentialLabel: 'low' | 'moderate' | 'high'
+  conversionProbability: number
+  rationale: string
+  keyOpportunitySignals: string[]
+  keyRiskSignals: string[]
+  recommendedActions: string[]
+}
+
 export interface DemandSupplyResponse {
   rows: DemandSupplyRow[]
   meta: {

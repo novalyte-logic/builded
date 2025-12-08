@@ -1,60 +1,36 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { listLeads } from './data'
+
 /**
  * Admin Leads API Route
- * 
+ *
  * GET /api/admin/leads - List leads with filters
  */
+export async function GET(req: NextRequest) {
+  const { searchParams } = req.nextUrl
+  const q = searchParams.get('q') || undefined
+  const status = searchParams.get('status') || undefined
+  const origin = searchParams.get('origin') || undefined
+  const priority = searchParams.get('priority') || undefined
+  const type = searchParams.get('type') || undefined
+  const page = Number(searchParams.get('page') || '1')
+  const pageSize = Number(searchParams.get('pageSize') || '50')
 
-import { NextRequest, NextResponse } from 'next/server'
+  const data = listLeads({
+    q,
+    status,
+    origin,
+    priority,
+    type,
+    page,
+    pageSize,
+  })
 
-// Mock data (replace with DB)
-const leads: any[] = []
-
-export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams
-    const status = searchParams.get('status')
-    const origin = searchParams.get('origin')
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
-    const priority = searchParams.get('priority')
-
-    let filteredLeads = [...leads]
-
-    // Apply filters
-    if (status) {
-      filteredLeads = filteredLeads.filter((l) => l.status === status)
-    }
-
-    if (origin) {
-      filteredLeads = filteredLeads.filter((l) => l.origin === origin)
-    }
-
-    if (priority) {
-      filteredLeads = filteredLeads.filter((l) => l.priority === priority)
-    }
-
-    if (startDate && endDate) {
-      filteredLeads = filteredLeads.filter((l) => {
-        const createdAt = new Date(l.created_at)
-        return createdAt >= new Date(startDate) && createdAt <= new Date(endDate)
-      })
-    }
-
-    // Sort by created_at desc
-    filteredLeads.sort((a, b) => {
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    })
-
-    return NextResponse.json({
-      leads: filteredLeads,
-      total: filteredLeads.length,
-    })
-  } catch (error: any) {
-    console.error('Leads API error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch leads', details: error.message },
-      { status: 500 }
-    )
-  }
+  return NextResponse.json({
+    items: data.items,
+    total: data.total,
+    page: data.page,
+    pageSize: data.pageSize,
+  })
 }
 

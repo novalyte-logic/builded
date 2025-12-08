@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Calendar, Filter, Search, Eye, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { useMemo, useState } from 'react'
+import { Filter, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react'
 import Explainer from './Explainer'
 
 interface Assessment {
@@ -30,6 +29,24 @@ interface Assessment {
     status: string
     priority: string
   } | null
+  patient?: {
+    age: number
+    gender: string
+    bmi?: number
+    state?: string
+    serviceInterest?: string
+  }
+  symptoms?: string[]
+  goals?: string[]
+  lifestyle?: string[]
+  redFlags?: string[]
+  triageSummary?: {
+    clinicalRisk: 'low' | 'moderate' | 'high'
+    conversionPotential: 'low' | 'moderate' | 'high'
+    keySignals: string[]
+    riskFactors: string[]
+    recommendedAction: string
+  }
 }
 
 interface AssessmentQueueProps {
@@ -41,8 +58,6 @@ export default function AssessmentQueue({
   onSelectAssessment,
   selectedAssessmentId,
 }: AssessmentQueueProps) {
-  const [assessments, setAssessments] = useState<Assessment[]>([])
-  const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({
     status: '',
     flow_type: '',
@@ -52,35 +67,207 @@ export default function AssessmentQueue({
     endDate: '',
   })
 
-  useEffect(() => {
-    fetchAssessments()
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchAssessments, 30000)
-    return () => clearInterval(interval)
-  }, [filters])
+  const assessments: Assessment[] = useMemo(
+    () => [
+      {
+        id: 'ASMT-889',
+        created_at: '2024-05-08T14:20:00Z',
+        updated_at: '2024-05-08T14:25:00Z',
+        flow_type: 'TRT',
+        path: 'TRT',
+        status: 'in_progress',
+        risk_level: 'moderate',
+        predicted_ltv_band: 'high',
+        city: 'Dallas',
+        country: 'US',
+        acquisition_channel: 'Meta',
+        ai_summary_json: {
+          summary: 'Patient reporting low energy, poor sleep; interested in TRT consult.',
+          keySymptoms: ['Low energy', 'Poor sleep', 'Low libido'],
+          riskFactors: ['Possible sleep apnea risk'],
+          redFlags: [],
+          recommendedPath: 'Route to TRT clinic with sleep screening',
+          urgency: 'medium',
+          highlights: ['Engaged in chat', 'Asked about pricing', 'Completed 70% of assessment'],
+        },
+        lead: { id: 'LD-001', status: 'in_review', priority: 'high' },
+        patient: { age: 42, gender: 'Male', bmi: 29.5, state: 'TX', serviceInterest: 'TRT' },
+        symptoms: ['Low energy', 'Low libido', 'Brain fog'],
+        goals: ['Increase energy', 'Improve sleep'],
+        lifestyle: ['Irregular sleep', 'Desk job', 'Moderate activity'],
+        redFlags: ['Possible sleep apnea'],
+        triageSummary: {
+          clinicalRisk: 'moderate',
+          conversionPotential: 'high',
+          keySignals: ['High engagement', 'Clear TRT symptoms', 'High LTV band'],
+          riskFactors: ['Sleep apnea screening needed'],
+          recommendedAction: 'Route to TX TRT clinic and schedule consult with sleep screening',
+        },
+      },
+      {
+        id: 'ASMT-102',
+        created_at: '2024-05-06T10:05:00Z',
+        updated_at: '2024-05-06T10:20:00Z',
+        flow_type: 'GLP-1',
+        path: 'GLP1',
+        status: 'completed',
+        risk_level: 'low',
+        predicted_ltv_band: 'medium',
+        city: 'Phoenix',
+        country: 'US',
+        acquisition_channel: 'Google',
+        ai_summary_json: {
+          summary: 'Weight loss interest; no major red flags noted.',
+          keySymptoms: ['Weight gain', 'Low activity'],
+          riskFactors: ['Family history of diabetes'],
+          redFlags: [],
+          recommendedPath: 'GLP-1 coaching and nutrition consult',
+          urgency: 'low',
+          highlights: ['Completed assessment fully', 'Open to coaching'],
+        },
+        lead: { id: 'LD-004', status: 'contacted', priority: 'medium' },
+        patient: { age: 38, gender: 'Female', bmi: 31.2, state: 'AZ', serviceInterest: 'GLP-1' },
+        symptoms: ['Weight gain', 'Low energy'],
+        goals: ['Lose 20 lbs', 'Improve activity'],
+        lifestyle: ['Sedentary work', 'Low activity'],
+        redFlags: [],
+        triageSummary: {
+          clinicalRisk: 'low',
+          conversionPotential: 'moderate',
+          keySignals: ['Completed flow', 'Open to coaching'],
+          riskFactors: ['BMI 31.2, family diabetes risk'],
+          recommendedAction: 'Offer GLP-1 program with nutrition kick-off',
+        },
+      },
+      {
+        id: 'ASMT-221',
+        created_at: '2024-05-03T09:15:00Z',
+        updated_at: '2024-05-03T09:25:00Z',
+        flow_type: 'PEPTIDES',
+        path: 'PEPTIDES',
+        status: 'qualified',
+        risk_level: 'low',
+        predicted_ltv_band: 'high',
+        city: 'Miami',
+        country: 'US',
+        acquisition_channel: 'TikTok',
+        ai_summary_json: {
+          summary: 'Interested in recovery peptides; athletic lifestyle.',
+          keySymptoms: ['Recovery soreness'],
+          riskFactors: ['None notable'],
+          redFlags: [],
+          recommendedPath: 'Route to peptide program consult',
+          urgency: 'medium',
+          highlights: ['Athletic profile', 'High LTV potential'],
+        },
+        lead: { id: 'LD-006', status: 'converted', priority: 'high' },
+        patient: { age: 29, gender: 'Male', bmi: 24.1, state: 'FL', serviceInterest: 'Peptides' },
+        symptoms: ['Recovery soreness'],
+        goals: ['Faster recovery'],
+        lifestyle: ['High activity', 'Regular training'],
+        redFlags: [],
+        triageSummary: {
+          clinicalRisk: 'low',
+          conversionPotential: 'high',
+          keySignals: ['Athletic, clear use case', 'High engagement', 'High LTV band'],
+          riskFactors: [],
+          recommendedAction: 'Book peptide consult and fast-track intake',
+        },
+      },
+      {
+        id: 'ASMT-305',
+        created_at: '2024-05-02T16:40:00Z',
+        updated_at: '2024-05-02T16:50:00Z',
+        flow_type: 'RECOVERY',
+        path: 'RECOVERY',
+        status: 'needs_review',
+        risk_level: 'high',
+        predicted_ltv_band: 'low',
+        city: 'Denver',
+        country: 'US',
+        acquisition_channel: 'Referral',
+        ai_summary_json: {
+          summary: 'Reports chest discomfort during exercise. Needs medical review.',
+          keySymptoms: ['Chest discomfort', 'Shortness of breath'],
+          riskFactors: ['Potential cardiac risk'],
+          redFlags: ['Chest discomfort on exertion'],
+          recommendedPath: 'Escalate to medical review before any protocol',
+          urgency: 'high',
+          highlights: ['Referral from friend', 'High-risk red flag present'],
+        },
+        lead: { id: 'LD-010', status: 'new', priority: 'high' },
+        patient: { age: 51, gender: 'Male', bmi: 28.4, state: 'CO', serviceInterest: 'Recovery' },
+        symptoms: ['Chest discomfort', 'Shortness of breath'],
+        goals: ['Improve endurance'],
+        lifestyle: ['Moderate activity', 'Some cardio'],
+        redFlags: ['Chest discomfort on exertion'],
+        triageSummary: {
+          clinicalRisk: 'high',
+          conversionPotential: 'low',
+          keySignals: ['Referral lead', 'Interested in recovery'],
+          riskFactors: ['Cardiac red flag'],
+          recommendedAction: 'Hold marketing; escalate to medical review immediately',
+        },
+      },
+      {
+        id: 'ASMT-412',
+        created_at: '2024-05-01T11:00:00Z',
+        updated_at: '2024-05-01T11:05:00Z',
+        flow_type: 'GENERAL',
+        path: 'GENERAL',
+        status: 'completed',
+        risk_level: 'moderate',
+        predicted_ltv_band: 'medium',
+        city: 'Austin',
+        country: 'US',
+        acquisition_channel: 'Direct',
+        ai_summary_json: {
+          summary: 'General wellness interest; wants better sleep and stress management.',
+          keySymptoms: ['Poor sleep', 'Stress'],
+          riskFactors: ['High stress job'],
+          redFlags: [],
+          recommendedPath: 'General wellness consult with sleep/stress focus',
+          urgency: 'low',
+          highlights: ['Direct inbound', 'Open to coaching'],
+        },
+        lead: { id: 'LD-011', status: 'contacted', priority: 'medium' },
+        patient: { age: 35, gender: 'Male', bmi: 26.0, state: 'TX', serviceInterest: 'General' },
+        symptoms: ['Poor sleep', 'Stress'],
+        goals: ['Improve sleep', 'Reduce stress'],
+        lifestyle: ['Desk job', 'Low activity'],
+        redFlags: [],
+        triageSummary: {
+          clinicalRisk: 'moderate',
+          conversionPotential: 'moderate',
+          keySignals: ['Direct inbound', 'Clear goals'],
+          riskFactors: ['High stress'],
+          recommendedAction: 'Schedule consult; route to sleep/stress protocol',
+        },
+      },
+    ],
+    []
+  )
 
-  const fetchAssessments = async () => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams()
-      if (filters.status) params.set('status', filters.status)
-      if (filters.flow_type) params.set('flow_type', filters.flow_type)
-      if (filters.risk_level) params.set('risk_level', filters.risk_level)
-      if (filters.predicted_ltv_band) params.set('predicted_ltv_band', filters.predicted_ltv_band)
-      if (filters.startDate) params.set('startDate', filters.startDate)
-      if (filters.endDate) params.set('endDate', filters.endDate)
+  const filteredAssessments = useMemo(() => {
+    return assessments.filter((a) => {
+      if (filters.status && a.status !== filters.status) return false
+      if (filters.flow_type && a.flow_type !== filters.flow_type && a.path !== filters.flow_type)
+        return false
+      if (filters.risk_level && a.risk_level !== filters.risk_level) return false
+      if (filters.predicted_ltv_band && a.predicted_ltv_band !== filters.predicted_ltv_band)
+        return false
 
-      const response = await fetch(`/api/admin/assessments?${params.toString()}`)
-      if (!response.ok) throw new Error('Failed to fetch assessments')
-
-      const data = await response.json()
-      setAssessments(data.assessments || [])
-    } catch (error) {
-      console.error('Error fetching assessments:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+      if (filters.startDate) {
+        const start = new Date(filters.startDate).getTime()
+        if (new Date(a.created_at).getTime() < start) return false
+      }
+      if (filters.endDate) {
+        const end = new Date(filters.endDate).getTime()
+        if (new Date(a.created_at).getTime() > end) return false
+      }
+      return true
+    })
+  }, [assessments, filters])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -241,20 +428,14 @@ export default function AssessmentQueue({
             </tr>
           </thead>
           <tbody className="divide-y divide-dark-border">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
-                  Loading assessments...
-                </td>
-              </tr>
-            ) : assessments.length === 0 ? (
+            {filteredAssessments.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
                   No assessments found
                 </td>
               </tr>
             ) : (
-              assessments.map((assessment) => (
+              filteredAssessments.map((assessment) => (
                 <tr
                   key={assessment.id}
                   onClick={() => onSelectAssessment(assessment)}
@@ -320,4 +501,3 @@ export default function AssessmentQueue({
     </div>
   )
 }
-

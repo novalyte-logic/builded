@@ -7,7 +7,7 @@ import StatusBadge from '@/components/StatusBadge'
 import { FileText, Users } from 'lucide-react'
 
 export default function AssessmentsPage() {
-  const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null)
+  const [selectedAssessment, setSelectedAssessment] = useState<any | null>(null)
 
   return (
     <div className="p-8 bg-dark-bg min-h-screen">
@@ -25,20 +25,19 @@ export default function AssessmentsPage() {
         {/* Left: Assessment Queue */}
         <div>
           <AssessmentQueue
-            onSelectAssessment={(assessment) => setSelectedAssessmentId(assessment.id)}
-            selectedAssessmentId={selectedAssessmentId}
+            onSelectAssessment={(assessment) => setSelectedAssessment(assessment)}
+            selectedAssessmentId={selectedAssessment?.id || null}
           />
         </div>
 
         {/* Right: Detail Panel */}
         <div>
-          {selectedAssessmentId ? (
+          {selectedAssessment ? (
             <AssessmentDetail
-              assessmentId={selectedAssessmentId}
-              onClose={() => setSelectedAssessmentId(null)}
+              assessment={selectedAssessment}
+              onClose={() => setSelectedAssessment(null)}
               onUpdateLead={() => {
-                // TODO: Open lead update modal
-                console.log('Update lead:', selectedAssessmentId)
+                console.log('Update lead:', selectedAssessment.id)
               }}
             />
           ) : (
@@ -52,4 +51,3 @@ export default function AssessmentsPage() {
     </div>
   )
 }
-

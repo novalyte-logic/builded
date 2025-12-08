@@ -18,15 +18,14 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000
 
-# Install only production deps
-COPY package.json package-lock.json ./
+# Copy package files from builder and install only production deps
+COPY --from=builder /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev
 
 # Copy built assets
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.js ./next.config.js
-COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
 CMD ["npm", "run", "start"]

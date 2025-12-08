@@ -1,25 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import clsx from 'clsx'
+import { useEffect, useMemo, useState } from 'react'
 import StatusBadge from '@/components/StatusBadge'
-import { Users, Filter, Search } from 'lucide-react'
+import { Users, Search } from 'lucide-react'
 import Explainer from '@/components/Explainer'
-
-interface Lead {
-  id: string
-  lead_type: string
-  origin: string
-  status: string
-  priority: string
-  created_at: string
-  assessment_id: string | null
-  tags: string[]
-}
+import LeadDetailPanel from '@/components/leads/LeadDetailPanel'
+import { LeadDetails, LeadSummary } from '@/lib/types/leads'
 
 export default function LeadsPage() {
-  const router = useRouter()
-  const [leads, setLeads] = useState<Lead[]>([])
+  const [leads, setLeads] = useState<LeadSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({
     status: '',
@@ -28,6 +18,10 @@ export default function LeadsPage() {
     lead_type: '',
     search: '',
   })
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
+  const [selectedLead, setSelectedLead] = useState<LeadDetails | null>(null)
+  const [loadingLeadDetails, setLoadingLeadDetails] = useState(false)
+  const [leadError, setLeadError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchLeads()
@@ -40,31 +34,43 @@ export default function LeadsPage() {
       if (filters.status) params.set('status', filters.status)
       if (filters.origin) params.set('origin', filters.origin)
       if (filters.priority) params.set('priority', filters.priority)
+      if (filters.lead_type) params.set('type', filters.lead_type)
+      if (filters.search) params.set('q', filters.search)
 
       const response = await fetch(`/api/admin/leads?${params.toString()}`)
       if (!response.ok) throw new Error('Failed to fetch leads')
 
       const data = await response.json()
-      let filteredLeads = data.leads || []
-
-      // Client-side search filter
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase()
-        filteredLeads = filteredLeads.filter((lead: Lead) =>
-          lead.id.toLowerCase().includes(searchLower) ||
-          lead.tags.some((tag: string) => tag.toLowerCase().includes(searchLower))
-        )
+      const items: LeadSummary[] = data.items || []
+      setLeads(items)
+      if (!selectedLeadId && items.length > 0) {
+        selectLead(items[0].id)
       }
-
-      if (filters.lead_type) {
-        filteredLeads = filteredLeads.filter((lead: Lead) => lead.lead_type === filters.lead_type)
-      }
-
-      setLeads(filteredLeads)
     } catch (error) {
       console.error('Error fetching leads:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const selectLead = (leadId: string) => {
+    setSelectedLeadId(leadId)
+    fetchLeadDetails(leadId)
+  }
+
+  const fetchLeadDetails = async (id: string) => {
+    try {
+      setLoadingLeadDetails(true)
+      setLeadError(null)
+      const res = await fetch(`/api/admin/leads/${id}`)
+      if (!res.ok) throw new Error('Failed to fetch lead details')
+      const data = await res.json()
+      setSelectedLead(data.lead as LeadDetails)
+    } catch (err) {
+      setLeadError((err as Error).message || 'Failed to load lead')
+      setSelectedLead(null)
+    } finally {
+      setLoadingLeadDetails(false)
     }
   }
 
@@ -93,6 +99,11 @@ export default function LeadsPage() {
         return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
     }
   }
+
+  const layoutClass = useMemo(
+    () => 'grid grid-cols-1 xl:grid-cols-[60%_40%] gap-6',
+    []
+  )
 
   return (
     <div className="p-8 bg-dark-bg min-h-screen">
@@ -205,97 +216,106 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Leads Table */}
-      <div className="bg-dark-surface border border-dark-border rounded-lg">
-        <div className="p-6 border-b border-dark-border">
-          <h2 className="text-lg font-semibold text-white">All Leads</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-dark-accent border-b border-dark-border">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Lead ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Origin
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Priority
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-dark-border">
-              {loading ? (
+      <div className={layoutClass}>
+        <div className="bg-dark-surface border border-dark-border rounded-lg">
+          <div className="p-6 border-b border-dark-border">
+            <h2 className="text-lg font-semibold text-white">All Leads</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-dark-accent border-b border-dark-border">
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
-                    Loading leads...
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Lead ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Origin
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Priority
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Created
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
-              ) : leads.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
-                    No leads found
-                  </td>
-                </tr>
-              ) : (
-                leads.map((lead) => (
-                  <tr
-                    key={lead.id}
-                    className="hover:bg-dark-hover transition-colors cursor-pointer"
-                    onClick={() => router.push(`/leads/${lead.id}`)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-mono text-gray-300">{lead.id.slice(0, 8)}...</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-white capitalize">{lead.lead_type}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-300 capitalize">{lead.origin.replace('_', ' ')}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-xs px-2 py-1 rounded-full border ${getStatusColor(lead.status)}`}>
-                        {lead.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-xs px-2 py-1 rounded-full border ${getPriorityColor(lead.priority)}`}>
-                        {lead.priority}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                      {new Date(lead.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          router.push(`/leads/${lead.id}`)
-                        }}
-                        className="text-primary hover:text-primary-light transition-colors text-sm"
-                      >
-                        View Context
-                      </button>
+              </thead>
+              <tbody className="divide-y divide-dark-border">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
+                      Loading leads...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : leads.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
+                      No leads found
+                    </td>
+                  </tr>
+                ) : (
+                  leads.map((lead) => {
+                    const isActive = selectedLeadId === lead.id
+                    return (
+                      <tr
+                        key={lead.id}
+                        className={clsx(
+                          'hover:bg-dark-hover transition-colors cursor-pointer',
+                          isActive && 'bg-primary/10 border-l-2 border-primary'
+                        )}
+                        onClick={() => selectLead(lead.id)}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm font-mono text-gray-300">{lead.id}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-white capitalize">{lead.type}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-gray-300 capitalize">{lead.origin.replace('_', ' ')}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`text-xs px-2 py-1 rounded-full border ${getStatusColor(lead.status)}`}>
+                            {lead.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`text-xs px-2 py-1 rounded-full border ${getPriorityColor(lead.priority)}`}>
+                            {lead.priority}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {new Date(lead.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              selectLead(lead.id)
+                            }}
+                            className="text-primary hover:text-primary-light transition-colors text-sm"
+                          >
+                            View Context
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
+
+        <LeadDetailPanel lead={selectedLead} loading={loadingLeadDetails} error={leadError} />
       </div>
     </div>
   )

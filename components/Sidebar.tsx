@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -28,6 +29,7 @@ import {
   Sliders,
   Briefcase,
   Code2,
+  ChevronDown,
 } from 'lucide-react'
 import clsx from 'clsx'
 import TooltipInfoModal from './TooltipInfoModal'
@@ -42,12 +44,14 @@ type NavItem = {
 }
 
 type NavGroup = {
+  id: string
   title: string
   items: NavItem[]
 }
 
 const navGroups: NavGroup[] = [
   {
+    id: 'core-platform',
     title: 'Core Platform',
     items: [
       {
@@ -136,6 +140,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    id: 'marketplace-engine',
     title: 'Marketplace Engine',
     items: [
       {
@@ -180,6 +185,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    id: 'workforce',
     title: 'Workforce',
     items: [
       {
@@ -224,6 +230,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    id: 'intelligence-growth',
     title: 'Intelligence & Growth',
     items: [
       {
@@ -331,6 +338,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    id: 'revenue-ads',
     title: 'Revenue & Ads',
     items: [
       {
@@ -381,6 +389,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    id: 'system-settings',
     title: 'System & Settings',
     items: [
       {
@@ -443,50 +452,201 @@ const navGroups: NavGroup[] = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  const [isMini, setIsMini] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [searchResults, setSearchResults] = useState<NavItem[]>([])
+
+  const allNavItems = useMemo(
+    () => navGroups.flatMap((group) => group.items.map((item) => ({ ...item }))),
+    []
+  )
+
+  const filteredGroups = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return navGroups
+    return navGroups
+      .map((group) => {
+        const items = group.items.filter(
+          (item) =>
+            item.name.toLowerCase().includes(term) || item.description.toLowerCase().includes(term)
+        )
+        return items.length ? { ...group, items } : null
+      })
+      .filter(Boolean) as NavGroup[]
+  }, [searchTerm])
+
+  useEffect(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) {
+      setSearchResults([])
+      return
+    }
+    const filtered = allNavItems.filter((item) => item.name.toLowerCase().includes(term))
+    setSearchResults(filtered.slice(0, 8))
+  }, [searchTerm, allNavItems])
+
+  const activeGroupIds = useMemo(() => {
+    return navGroups
+      .filter((group) =>
+        group.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+      )
+      .map((g) => g.id)
+  }, [pathname])
+
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const next: Record<string, boolean> = { ...prev }
+      navGroups.forEach((group) => {
+        if (prev[group.id] === undefined) {
+          const hasActive = group.items.some(
+            (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+          )
+          next[group.id] = hasActive || group.id === 'core-platform'
+        }
+      })
+      if (Object.keys(next).length === 0) {
+        next['core-platform'] = true
+      }
+      return next
+    })
+  }, [pathname])
+
+  const toggleGroup = (id: string) => {
+    setOpenGroups((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
 
   return (
-    <div className="w-64 bg-dark-surface border-r border-dark-border flex flex-col h-screen">
+    <div
+      className={clsx(
+        'bg-dark-surface border-r border-dark-border flex flex-col h-screen transition-all duration-200',
+        isMini ? 'w-16' : 'w-64'
+      )}
+    >
       <div className="p-6 border-b border-dark-border flex-shrink-0">
-        <h1 className="text-xl font-bold text-white">
-          Novalyte<sup className="text-xs text-gray-400">™</sup>
-        </h1>
-        <p className="text-xs text-gray-500 mt-1">God&apos;s Eye Admin</p>
+        {!isMini ? (
+          <>
+            <h1 className="text-xl font-bold text-white">
+              Novalyte<sup className="text-xs text-gray-400">™</sup>
+            </h1>
+            <p className="text-xs text-gray-500 mt-1">God&apos;s Eye Admin</p>
+          </>
+        ) : (
+          <div className="text-center text-sm font-bold text-white">
+            N<sup className="text-[10px] text-gray-400">™</sup>
+          </div>
+        )}
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsMini((prev) => !prev)}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-dark-border hover:bg-dark-hover text-gray-400"
+            title={isMini ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isMini ? '<' : '>'}
+          </button>
+          {!isMini && (
+            <input
+              aria-label="Search navigation"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchResults.length > 0) {
+                  router.push(searchResults[0].href)
+                  setSearchTerm('')
+                  setSearchResults([])
+                }
+              }}
+              placeholder="Search navigation…"
+              className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-primary focus:outline-none"
+            />
+          )}
+        </div>
+        {!isMini && searchResults.length > 0 && (
+          <div className="mt-2 rounded-lg bg-dark-bg border border-dark-border divide-y divide-dark-border shadow-lg overflow-hidden">
+            {searchResults.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => {
+                  setSearchTerm('')
+                  setSearchResults([])
+                }}
+                className="block px-3 py-2 text-sm text-gray-200 hover:bg-dark-hover transition-colors"
+              >
+                {item.name}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
-      <nav className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0">
-        {navGroups.map((group, groupIndex) => (
+      <nav className={clsx('flex-1 overflow-y-auto p-4 space-y-1 min-h-0', isMini && 'px-2')}>
+        {filteredGroups.map((group, groupIndex) => (
           <div key={group.title} className="space-y-1">
-            <p className="px-4 text-[11px] tracking-wide text-gray-500 uppercase mt-4 mb-2">
-              {group.title}
-            </p>
-            {group.items.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href
+            <button
+              type="button"
+              onClick={() => toggleGroup(group.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggleGroup(group.id)
+                }
+              }}
+              aria-expanded={!!openGroups[group.id]}
+              className={clsx(
+                'w-full flex items-center justify-between px-4 py-2 text-[11px] tracking-wide text-gray-500 uppercase mt-4 rounded-lg hover:bg-dark-hover transition-colors text-left',
+                isMini && 'px-2 justify-center'
+              )}
+              title={isMini ? group.title : group.items.slice(0, 3).map((i) => i.name).join(' · ')}
+            >
+              {!isMini && <span>{group.title}</span>}
+              <ChevronDown
+                className={clsx(
+                  'w-4 h-4 transition-transform text-gray-500',
+                  openGroups[group.id] ? 'rotate-180' : 'rotate-0'
+                )}
+              />
+            </button>
+            {openGroups[group.id] && (
+              <div className={clsx('space-y-1', isMini && 'pl-1')}>
+                {group.items.map((item) => {
+                  const Icon = item.icon
+                  const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
 
-              return (
-                <div key={item.name} className="relative group">
-                  <Link
-                    href={item.href}
-                    className={clsx(
-                      'flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-primary/20 text-primary border border-primary/30'
-                        : 'text-gray-400 hover:text-white hover:bg-dark-hover'
-                    )}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="flex-1">{item.name}</span>
-                    <div className="ml-auto">
-                      <TooltipInfoModal
-                        title={item.name}
-                        description={item.description}
-                        howTo={item.howTo}
-                        examples={item.examples}
-                      />
+                  return (
+                    <div key={item.name} className="relative group">
+                      <Link
+                        href={item.href}
+                        className={clsx(
+                          'flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-primary/20 text-primary border border-primary/30'
+                            : 'text-gray-400 hover:text-white hover:bg-dark-hover',
+                          isMini && 'px-2 justify-center'
+                        )}
+                        title={isMini ? item.name : undefined}
+                      >
+                        <Icon className="w-5 h-5" />
+                        {!isMini && (
+                          <>
+                            <span className="flex-1">{item.name}</span>
+                            <div className="ml-auto">
+                              <TooltipInfoModal
+                                title={item.name}
+                                description={item.description}
+                                howTo={item.howTo}
+                                examples={item.examples}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </Link>
                     </div>
-                  </Link>
-                </div>
-              )
-            })}
+                  )
+                })}
+              </div>
+            )}
             {groupIndex !== navGroups.length - 1 && <div className="h-px bg-dark-border my-3" />}
           </div>
         ))}
