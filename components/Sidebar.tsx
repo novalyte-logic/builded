@@ -291,6 +291,19 @@ const navGroups: NavGroup[] = [
         ],
       },
       {
+        name: 'Deal Flow Engine',
+        href: '/admin/dealflow-engine',
+        icon: Briefcase,
+        description: 'Sales command center for signing clinics to Novalyte. Scan, analyze, and generate outreach.',
+        howTo:
+          'Run deal-flow scans by region and service line, view ranked clinics with priority scores, and access AI-generated outreach packs.',
+        examples: [
+          'Scan TRT clinics in Texas',
+          'View clinic funnel weaknesses',
+          'Generate email/LinkedIn/call scripts',
+        ],
+      },
+      {
         name: 'Demand & Opportunities',
         href: '/admin/insights/demand',
         icon: Target,
