@@ -1,173 +1,705 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, Search, Filter, DollarSign } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { Users, Search, Filter, Briefcase, Target, Mail, MessageSquare, Phone, XCircle, ArrowRight, ExternalLink } from 'lucide-react'
 import StatusBadge from '@/components/StatusBadge'
-import AdminSuperControls from '@/components/workforce-exchange/AdminSuperControls'
-import BookingHistory from '@/components/workforce-exchange/BookingHistory'
-import PractitionerDirectory from '@/components/workforce-exchange/PractitionerDirectory'
-import type { PractitionerProfile, WorkforceBooking } from '@/lib/types/workforce'
+import clsx from 'clsx'
+
+type RoleType = 'RN' | 'NP' | 'PA' | 'LPN' | 'MA' | 'OTHER'
+type EmploymentType = 'TEMP' | 'PER_DIEM' | 'CONTRACT'
+type ServiceLineFilter = 'TRT' | 'GLP-1' | 'IV_THERAPY' | 'GENERAL'
+
+interface ClinicJob {
+  jobId: string
+  clinicName: string
+  clinicWebsite: string | null
+  jobTitle: string
+  roleType: string
+  employmentType: string
+  location: { city: string; state: string }
+  sourcePlatform: string
+  postingUrl: string | null
+  summary: string
+  postedAt: string | null
+  serviceLine?: string
+  hiringUrgencySignal?: 'low' | 'medium' | 'high'
+}
+
+interface Candidate {
+  candidateId: string
+  displayName: string
+  roleType: string
+  yearsExperience: number
+  primarySkills: string[]
+  preferredShifts: string[]
+  preferredRegions: string[]
+  profileSource: string
+  contactMethod: string
+  summary: string
+}
+
+interface WorkforceMatch {
+  clinicJob: {
+    clinicName: string
+    jobTitle: string
+    employmentType: string
+    serviceLines: string[]
+    location: { city: string; state: string }
+  }
+  candidate: {
+    displayName: string
+    roleType: string
+    yearsExperience: number
+  }
+  fitScore: number
+  priority: 'high' | 'medium' | 'low'
+  notes: string
+  shiftCompatibility?: 'good' | 'partial' | 'poor'
+  serviceLineAlignment?: 'good' | 'partial' | 'poor'
+}
+
+interface MatchDetail {
+  match: WorkforceMatch
+  clinicJob: ClinicJob
+  candidate: Candidate
+  outreachToClinic?: {
+    emailSubject: string
+    emailBody: string
+    dmScript: string
+    callOpener: string
+    angleSummary?: string
+    warningsOrCaveats?: string
+  }
+  outreachToCandidate?: {
+    emailSubject: string
+    emailBody: string
+    dmScript: string
+    callOpener: string
+    angleSummary?: string
+    warningsOrCaveats?: string
+  }
+}
 
 export default function WorkforceExchangePage() {
-  const [activeView, setActiveView] = useState<'overview' | 'practitioners' | 'bookings'>('overview')
-  const [practitioners, setPractitioners] = useState<PractitionerProfile[]>([])
-  const [bookings, setBookings] = useState<any[]>([])
-  const [feeSettings, setFeeSettings] = useState({
-    matchFee: 25,
-    percentageFee: 15,
-    priorityFee: 50,
-    verificationFee: 99,
-  })
-  const [loading, setLoading] = useState(true)
+  const searchParams = useSearchParams()
+  const [region, setRegion] = useState('Texas')
+  const [roleType, setRoleType] = useState<RoleType>('RN')
+  const [employmentType, setEmploymentType] = useState<EmploymentType>('TEMP')
+  const [serviceLine, setServiceLine] = useState<ServiceLineFilter>('GENERAL')
+  const [loading, setLoading] = useState(false)
+  const [jobs, setJobs] = useState<ClinicJob[]>([])
+  const [matches, setMatches] = useState<WorkforceMatch[]>([])
+  const [selectedMatch, setSelectedMatch] = useState<MatchDetail | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
+  // Load region from URL params
   useEffect(() => {
-    fetchData()
-    const interval = setInterval(fetchData, 60000) // Refresh every 60 seconds
-    return () => clearInterval(interval)
-  }, [])
+    const urlRegion = searchParams.get('region')
+    if (urlRegion) {
+      setRegion(urlRegion)
+    }
+  }, [searchParams])
 
-  const fetchData = async () => {
+  const handleGenerateMatches = async () => {
     setLoading(true)
+    setError(null)
+
     try {
-      // TODO: Replace with actual API calls
-      // const [practitionersRes, bookingsRes] = await Promise.all([
-      //   fetch('/api/admin/workforce/practitioners'),
-      //   fetch('/api/admin/workforce/bookings'),
-      // ])
+      // Map RoleType to MCP RoleType
+      const mcpRoleType = 
+        roleType === 'RN' ? 'NURSE' :
+        roleType === 'NP' || roleType === 'PA' ? 'NP_PA' :
+        roleType === 'MA' ? 'MA_TECH' : 'OTHER'
 
-      // Mock data for now
-      const mockPractitioners: PractitionerProfile[] = [
-        {
-          id: '1',
-          firstName: 'Sarah',
-          lastName: 'Chen',
-          email: 'sarah.chen@example.com',
-          phone: '555-0101',
-          role: 'NP',
-          credentials: ['FNP-C', 'RN-BSN'],
-          specialties: [
-            { skill: 'TRT', experience_years: 5, verified: true },
-            { skill: 'GLP-1', experience_years: 3, verified: true },
-          ],
-          location: { city: 'Los Angeles', state: 'CA', zipCode: '90001' },
-          hourlyRate: 125,
-          dailyRate: 950,
-          availability: {
-            startDate: new Date(),
-            endDate: null,
-            daysOfWeek: [1, 2, 3, 4, 5],
-            hoursPerDay: 8,
+      const response = await fetch('/api/admin/mcp/workforce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'generate_workforce_matches',
+          params: {
+            region,
+            roleType: mcpRoleType,
+            serviceLineFilter: serviceLine,
+            maxClinics: 20,
+            maxCandidates: 30,
           },
-          rating: 4.8,
-          reviewCount: 42,
-          backgroundCheckStatus: 'Verified',
-          backgroundCheckExpiry: new Date(Date.now() + 365 * 24 * 3600000),
-          verified: true,
-          profileImageUrl: null,
-          bio: 'Experienced Nurse Practitioner specializing in men\'s health and hormone optimization.',
-          certifications: ['FNP-C', 'AANP'],
-          languages: ['English', 'Mandarin'],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ]
+        }),
+      })
 
-      setPractitioners(mockPractitioners)
-      setBookings([])
+      if (!response.ok) {
+        throw new Error('Failed to generate matches')
+      }
+
+      const data = await response.json()
+      const matchesResult = data.results
+
+      // Extract jobs from matches
+      const uniqueJobs = new Map<string, ClinicJob>()
+      matchesResult.matches.forEach((match: WorkforceMatch) => {
+        const jobKey = `${match.clinicJob.clinicName}-${match.clinicJob.jobTitle}`
+        if (!uniqueJobs.has(jobKey)) {
+          uniqueJobs.set(jobKey, {
+            jobId: `job-${uniqueJobs.size}`,
+            clinicName: match.clinicJob.clinicName,
+            clinicWebsite: null,
+            jobTitle: match.clinicJob.jobTitle,
+            roleType: mcpRoleType,
+            employmentType: match.clinicJob.employmentType,
+            location: match.clinicJob.location,
+            sourcePlatform: 'Workforce Exchange',
+            postingUrl: null,
+            summary: `Service lines: ${match.clinicJob.serviceLines.join(', ')}`,
+            postedAt: null,
+            serviceLine: match.clinicJob.serviceLines[0],
+            hiringUrgencySignal: 'medium',
+          })
+        }
+      })
+
+      setJobs(Array.from(uniqueJobs.values()))
+      setMatches(matchesResult.matches)
     } catch (error) {
-      console.error('Error fetching data:', error)
+      console.error('Error generating matches:', error)
+      setError(error instanceof Error ? error.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSelectPractitioner = (practitioner: PractitionerProfile) => {
-    // TODO: Open practitioner detail panel
-    console.log('Selected practitioner:', practitioner.id)
+  const handleSelectMatch = async (match: WorkforceMatch) => {
+    // Find the full job and candidate details
+    const job = jobs.find(j => j.clinicName === match.clinicJob.clinicName && j.jobTitle === match.clinicJob.jobTitle)
+    
+    if (!job) return
+
+    // Generate outreach packs
+    try {
+      const outreachResponse = await fetch('/api/admin/mcp/workforce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'vertex_workforce_outreach_brain',
+          params: {
+            clinicJob: job,
+            candidateProfile: {
+              candidateId: match.candidate.displayName,
+              displayName: match.candidate.displayName,
+              roleType: match.candidate.roleType,
+              yearsExperience: match.candidate.yearsExperience,
+              primarySkills: [],
+              preferredShifts: [],
+              preferredRegions: [],
+              profileSource: 'Workforce Exchange',
+              contactMethod: 'email',
+              summary: '',
+            },
+            direction: 'TO_CLINIC',
+          },
+        }),
+      })
+
+      const candidateOutreachResponse = await fetch('/api/admin/mcp/workforce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'vertex_workforce_outreach_brain',
+          params: {
+            clinicJob: job,
+            candidateProfile: {
+              candidateId: match.candidate.displayName,
+              displayName: match.candidate.displayName,
+              roleType: match.candidate.roleType,
+              yearsExperience: match.candidate.yearsExperience,
+              primarySkills: [],
+              preferredShifts: [],
+              preferredRegions: [],
+              profileSource: 'Workforce Exchange',
+              contactMethod: 'email',
+              summary: '',
+            },
+            direction: 'TO_CANDIDATE',
+          },
+        }),
+      })
+
+      const clinicOutreach = outreachResponse.ok ? (await outreachResponse.json()).results?.pack : null
+      const candidateOutreach = candidateOutreachResponse.ok ? (await candidateOutreachResponse.json()).results?.pack : null
+
+      setSelectedMatch({
+        match,
+        clinicJob: job,
+        candidate: {
+          candidateId: match.candidate.displayName,
+          displayName: match.candidate.displayName,
+          roleType: match.candidate.roleType,
+          yearsExperience: match.candidate.yearsExperience,
+          primarySkills: [],
+          preferredShifts: [],
+          preferredRegions: [],
+          profileSource: 'Workforce Exchange',
+          contactMethod: 'email',
+          summary: '',
+        },
+        outreachToClinic: clinicOutreach,
+        outreachToCandidate: candidateOutreach,
+      })
+    } catch (error) {
+      console.error('Error loading match details:', error)
+      setSelectedMatch({
+        match,
+        clinicJob: job,
+        candidate: {
+          candidateId: match.candidate.displayName,
+          displayName: match.candidate.displayName,
+          roleType: match.candidate.roleType,
+          yearsExperience: match.candidate.yearsExperience,
+          primarySkills: [],
+          preferredShifts: [],
+          preferredRegions: [],
+          profileSource: 'Workforce Exchange',
+          contactMethod: 'email',
+          summary: '',
+        },
+      })
+    }
   }
 
   return (
     <div className="p-8 bg-dark-bg min-h-screen">
-      <div className="mb-6">
+      {/* Header */}
+      <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-3xl font-bold text-white">
-              Clinical Workforce Exchange
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3 mb-2">
+              <Briefcase className="w-8 h-8" />
+              Workforce Exchange
             </h1>
-            <p className="text-gray-400 mt-1">
-              On-demand staffing marketplace for Men&apos;s Clinics. Match, book, and manage healthcare practitioners.
+            <p className="text-gray-400 text-lg">
+              Match clinics hiring temp/contract staff with nurses seeking flexible work.
             </p>
           </div>
           <StatusBadge status="live" />
         </div>
       </div>
 
-      {/* View Tabs */}
-      <div className="mb-6 flex gap-2">
+      {/* Controls */}
+      <div className="bg-dark-surface border border-dark-border rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-semibold text-white mb-4">Generate Matches</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Region</label>
+            <input
+              type="text"
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              placeholder="Texas"
+              className="w-full bg-dark-accent border border-dark-border rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Role Type</label>
+            <select
+              value={roleType}
+              onChange={(e) => setRoleType(e.target.value as RoleType)}
+              className="w-full bg-dark-accent border border-dark-border rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
+            >
+              <option value="RN">RN</option>
+              <option value="NP">NP</option>
+              <option value="PA">PA</option>
+              <option value="LPN">LPN</option>
+              <option value="MA">MA</option>
+              <option value="OTHER">OTHER</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Employment Type</label>
+            <select
+              value={employmentType}
+              onChange={(e) => setEmploymentType(e.target.value as EmploymentType)}
+              className="w-full bg-dark-accent border border-dark-border rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
+            >
+              <option value="TEMP">TEMP</option>
+              <option value="PER_DIEM">PER_DIEM</option>
+              <option value="CONTRACT">CONTRACT</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Service Line</label>
+            <select
+              value={serviceLine}
+              onChange={(e) => setServiceLine(e.target.value as ServiceLineFilter)}
+              className="w-full bg-dark-accent border border-dark-border rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
+            >
+              <option value="TRT">TRT</option>
+              <option value="GLP-1">GLP-1</option>
+              <option value="IV_THERAPY">IV Therapy</option>
+              <option value="GENERAL">General</option>
+            </select>
+          </div>
+        </div>
         <button
-          onClick={() => setActiveView('overview')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeView === 'overview'
-              ? 'bg-primary/20 text-primary border border-primary/30'
-              : 'bg-dark-accent border border-dark-border text-gray-400 hover:text-white'
-          }`}
+          onClick={handleGenerateMatches}
+          disabled={loading || !region}
+          className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Overview & Controls
-        </button>
-        <button
-          onClick={() => setActiveView('practitioners')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeView === 'practitioners'
-              ? 'bg-primary/20 text-primary border border-primary/30'
-              : 'bg-dark-accent border border-dark-border text-gray-400 hover:text-white'
-          }`}
-        >
-          Practitioner Directory
-        </button>
-        <button
-          onClick={() => setActiveView('bookings')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeView === 'bookings'
-              ? 'bg-primary/20 text-primary border border-primary/30'
-              : 'bg-dark-accent border border-dark-border text-gray-400 hover:text-white'
-          }`}
-        >
-          Booking History
+          {loading ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              Generating Matches...
+            </>
+          ) : (
+            <>
+              <Target className="w-5 h-5" />
+              Generate Matches
+            </>
+          )}
         </button>
       </div>
 
-      {/* Content */}
-      {activeView === 'overview' && (
-        <AdminSuperControls
-          practitioners={practitioners}
-          clinics={[]}
-          bookings={bookings}
-          feeSettings={feeSettings}
-          onUpdateFees={setFeeSettings}
-          onApprovePractitioner={(id) => {
-            setPractitioners((prev) =>
-              prev.map((p) => (p.id === id ? { ...p, verified: true } : p))
-            )
-          }}
-          onBanPractitioner={(id) => {
-            setPractitioners((prev) => prev.filter((p) => p.id !== id))
-          }}
-          onApproveClinic={(id) => console.log('Approve clinic:', id)}
-          onOverrideMatch={(matchId) => console.log('Override match:', matchId)}
-        />
+      {/* Error Display */}
+      {error && (
+        <div className="mb-6 p-4 bg-status-offline/10 border border-status-offline/30 rounded-lg">
+          <p className="text-sm text-status-offline">{error}</p>
+        </div>
       )}
 
-      {activeView === 'practitioners' && (
-        <PractitionerDirectory
-          practitioners={practitioners}
-          onSelectPractitioner={handleSelectPractitioner}
-        />
+      {/* Two Column Layout */}
+      {matches.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Left: Clinic Jobs Table */}
+          <div className="bg-dark-surface border border-dark-border rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-primary" />
+              Clinic Jobs
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-dark-accent border-b border-dark-border">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Job Title</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Clinic</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Region</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Urgency</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-border">
+                  {jobs.map((job, idx) => (
+                    <tr key={idx} className="hover:bg-dark-hover transition-colors">
+                      <td className="px-4 py-3 text-sm text-white font-medium">{job.jobTitle}</td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{job.clinicName}</td>
+                      <td className="px-4 py-3 text-sm text-gray-300">
+                        {job.location.city}, {job.location.state}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{job.employmentType}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={clsx(
+                            'px-2 py-1 rounded text-xs font-medium',
+                            job.hiringUrgencySignal === 'high' && 'bg-status-live/10 text-status-live',
+                            job.hiringUrgencySignal === 'medium' && 'bg-status-degraded/10 text-status-degraded',
+                            job.hiringUrgencySignal === 'low' && 'bg-gray-500/10 text-gray-400'
+                          )}
+                        >
+                          {job.hiringUrgencySignal || 'Medium'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Right: Top Matches Table */}
+          <div className="bg-dark-surface border border-dark-border rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Target className="w-5 h-5 text-primary" />
+              Top Matches
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-dark-accent border-b border-dark-border">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Candidate</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Role</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Experience</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Fit Score</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Shifts</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-border">
+                  {matches.slice(0, 10).map((match, idx) => (
+                    <tr
+                      key={idx}
+                      className={clsx(
+                        'hover:bg-dark-hover transition-colors cursor-pointer',
+                        selectedMatch?.match === match && 'bg-primary/10'
+                      )}
+                      onClick={() => handleSelectMatch(match)}
+                    >
+                      <td className="px-4 py-3 text-sm text-white font-medium">{match.candidate.displayName}</td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{match.candidate.roleType}</td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{match.candidate.yearsExperience} yrs</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={clsx(
+                            'px-2 py-1 rounded text-xs font-medium',
+                            match.fitScore >= 75 && 'bg-status-live/10 text-status-live',
+                            match.fitScore >= 50 && 'bg-status-degraded/10 text-status-degraded',
+                            match.fitScore < 50 && 'bg-gray-500/10 text-gray-400'
+                          )}
+                        >
+                          {match.fitScore}/100
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">
+                        {match.candidate.preferredShifts?.join(', ') || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSelectMatch(match)
+                          }}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          View Match →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
 
-      {activeView === 'bookings' && (
-        <BookingHistory bookings={bookings as any} />
+      {/* Match Detail Panel (Modal) */}
+      {selectedMatch && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-dark-surface border border-dark-border rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-dark-surface border-b border-dark-border p-6 z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-white mb-1">Match Details</h2>
+                  <p className="text-sm text-gray-400">
+                    {selectedMatch.clinicJob.clinicName} × {selectedMatch.candidate.displayName}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedMatch(null)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Fit Analysis */}
+              <div className="bg-dark-accent border border-dark-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-primary uppercase tracking-wide mb-3">
+                  Why They Fit
+                </h3>
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1">Fit Score</div>
+                    <div className="text-2xl font-bold text-primary">{selectedMatch.match.fitScore}/100</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1">Priority</div>
+                    <span
+                      className={clsx(
+                        'px-2 py-1 rounded text-xs font-medium',
+                        selectedMatch.match.priority === 'high' && 'bg-status-live/10 text-status-live',
+                        selectedMatch.match.priority === 'medium' && 'bg-status-degraded/10 text-status-degraded',
+                        selectedMatch.match.priority === 'low' && 'bg-gray-500/10 text-gray-400'
+                      )}
+                    >
+                      {selectedMatch.match.priority.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-300">{selectedMatch.match.notes}</p>
+              </div>
+
+              {/* Compatibility */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-dark-accent border border-dark-border rounded-lg p-4">
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    Shift Compatibility
+                  </h4>
+                  <span
+                    className={clsx(
+                      'px-2 py-1 rounded text-xs font-medium',
+                      selectedMatch.match.shiftCompatibility === 'good' && 'bg-status-live/10 text-status-live',
+                      selectedMatch.match.shiftCompatibility === 'partial' && 'bg-status-degraded/10 text-status-degraded',
+                      selectedMatch.match.shiftCompatibility === 'poor' && 'bg-gray-500/10 text-gray-400'
+                    )}
+                  >
+                    {selectedMatch.match.shiftCompatibility || 'Partial'}
+                  </span>
+                </div>
+                <div className="bg-dark-accent border border-dark-border rounded-lg p-4">
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    Service Line Alignment
+                  </h4>
+                  <span
+                    className={clsx(
+                      'px-2 py-1 rounded text-xs font-medium',
+                      selectedMatch.match.serviceLineAlignment === 'good' && 'bg-status-live/10 text-status-live',
+                      selectedMatch.match.serviceLineAlignment === 'partial' && 'bg-status-degraded/10 text-status-degraded',
+                      selectedMatch.match.serviceLineAlignment === 'poor' && 'bg-gray-500/10 text-gray-400'
+                    )}
+                  >
+                    {selectedMatch.match.serviceLineAlignment || 'Partial'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Outreach Scripts */}
+              {selectedMatch.outreachToClinic && (
+                <div>
+                  <h3 className="text-sm font-semibold text-primary uppercase tracking-wide mb-4">
+                    Outreach Scripts
+                  </h3>
+                  
+                  {/* Angle Summary */}
+                  {selectedMatch.outreachToClinic.angleSummary && (
+                    <div className="mb-4 bg-dark-accent border border-primary/30 rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">
+                        Core Angle
+                      </h4>
+                      <p className="text-sm text-gray-300">{selectedMatch.outreachToClinic.angleSummary}</p>
+                    </div>
+                  )}
+
+                  {/* Warnings */}
+                  {selectedMatch.outreachToClinic.warningsOrCaveats && (
+                    <div className="mb-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-yellow-400 uppercase tracking-wide mb-1">
+                        Note
+                      </h4>
+                      <p className="text-sm text-yellow-300">{selectedMatch.outreachToClinic.warningsOrCaveats}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* To Clinic */}
+                    <div className="bg-gradient-to-r from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg p-4">
+                      <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-primary" />
+                        To Clinic
+                      </h4>
+                      <div className="mb-3">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+                          Subject
+                        </label>
+                        <div className="p-2 bg-dark-surface border border-dark-border rounded text-xs text-white font-medium">
+                          {selectedMatch.outreachToClinic.emailSubject}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+                          Email Body
+                        </label>
+                        <div className="p-2 bg-dark-surface border border-dark-border rounded text-xs text-gray-300 whitespace-pre-wrap font-sans max-h-32 overflow-y-auto">
+                          {selectedMatch.outreachToClinic.emailBody}
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+                          DM Script
+                        </label>
+                        <div className="p-2 bg-dark-surface border border-dark-border rounded text-xs text-gray-300">
+                          {selectedMatch.outreachToClinic.dmScript}
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+                          Call Opener
+                        </label>
+                        <div className="p-2 bg-dark-surface border border-dark-border rounded text-xs text-gray-300">
+                          {selectedMatch.outreachToClinic.callOpener}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* To Candidate */}
+                    {selectedMatch.outreachToCandidate && (
+                      <div className="bg-dark-accent border border-dark-border rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-primary" />
+                          To Candidate
+                        </h4>
+                        <div className="mb-3">
+                          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+                            Subject
+                          </label>
+                          <div className="p-2 bg-dark-surface border border-dark-border rounded text-xs text-white font-medium">
+                            {selectedMatch.outreachToCandidate.emailSubject}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+                            Email Body
+                          </label>
+                          <div className="p-2 bg-dark-surface border border-dark-border rounded text-xs text-gray-300 whitespace-pre-wrap font-sans max-h-32 overflow-y-auto">
+                            {selectedMatch.outreachToCandidate.emailBody}
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+                            DM Script
+                          </label>
+                          <div className="p-2 bg-dark-surface border border-dark-border rounded text-xs text-gray-300">
+                            {selectedMatch.outreachToCandidate.dmScript}
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+                            Call Opener
+                          </label>
+                          <div className="p-2 bg-dark-surface border border-dark-border rounded text-xs text-gray-300">
+                            {selectedMatch.outreachToCandidate.callOpener}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Crosslink */}
+              <div className="border-t border-dark-border pt-4">
+                <a
+                  href={`/clinics-control?clinic=${encodeURIComponent(selectedMatch.clinicJob.clinicName)}`}
+                  className="text-sm text-primary hover:underline flex items-center gap-1"
+                >
+                  Open clinic in Clinics Control <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {matches.length === 0 && !loading && (
+        <div className="bg-dark-surface border border-dark-border rounded-lg p-12 text-center">
+          <Target className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-white mb-2">
+            Generate matches to get started
+          </h3>
+          <p className="text-gray-400 max-w-md mx-auto">
+            Use the controls above to find clinic jobs and match them with available talent.
+          </p>
+        </div>
       )}
     </div>
   )
 }
-

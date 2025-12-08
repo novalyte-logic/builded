@@ -100,7 +100,7 @@ export default function ProductList({ onSelectProduct, selectedProductId }: Prod
           >
             <option value="">All Audiences</option>
             <option value="Patient">Patient</option>
-            <option value="Men's Clinic">Men's Clinic</option>
+            <option value="Men's Clinic">Men&apos;s Clinic</option>
             <option value="Both">Both</option>
           </select>
         </div>

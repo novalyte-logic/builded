@@ -144,8 +144,8 @@ export async function DELETE(
     // Serialize dates for JSON response
     const serializedClinic = {
       ...clinics[clinicIndex],
-      created_at: clinics[clinicIndex].created_at.toISOString ? clinics[clinicIndex].created_at.toISOString() : clinics[clinicIndex].created_at,
-      updated_at: clinics[clinicIndex].updated_at.toISOString ? clinics[clinicIndex].updated_at.toISOString() : clinics[clinicIndex].updated_at,
+      created_at: clinics[clinicIndex].created_at instanceof Date ? clinics[clinicIndex].created_at.toISOString() : (typeof clinics[clinicIndex].created_at === 'string' ? clinics[clinicIndex].created_at : new Date().toISOString()),
+      updated_at: clinics[clinicIndex].updated_at instanceof Date ? clinics[clinicIndex].updated_at.toISOString() : (typeof clinics[clinicIndex].updated_at === 'string' ? clinics[clinicIndex].updated_at : new Date().toISOString()),
     }
 
     return NextResponse.json({ message: 'Clinic deleted', clinic: serializedClinic })

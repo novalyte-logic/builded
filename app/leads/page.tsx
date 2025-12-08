@@ -2,8 +2,9 @@
 
 import clsx from 'clsx'
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import StatusBadge from '@/components/StatusBadge'
-import { Users, Search } from 'lucide-react'
+import { Users, Search, ArrowRight, Target } from 'lucide-react'
 import Explainer from '@/components/Explainer'
 import LeadDetailPanel from '@/components/leads/LeadDetailPanel'
 import { LeadDetails, LeadSummary } from '@/lib/types/leads'
@@ -114,6 +115,25 @@ export default function LeadsPage() {
             <p className="text-gray-400">All leads with full context (assessments, messages, AI insights)</p>
           </div>
           <StatusBadge status="live" />
+        </div>
+      </div>
+
+      {/* Cross-talk Banner */}
+      <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Target className="w-5 h-5 text-primary" />
+            <p className="text-sm text-gray-300">
+              View related clinic opportunity in Dealflow Console
+            </p>
+          </div>
+          <Link
+            href="/admin/dealflow"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm"
+          >
+            Go to Dealflow Console
+            <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       </div>
 

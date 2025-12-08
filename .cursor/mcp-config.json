@@ -1,0 +1,120 @@
+{
+  "mcpServers": {
+    "bigquery": {
+      "name": "BigQuery MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-bigquery"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "${GOOGLE_APPLICATION_CREDENTIALS}",
+        "GOOGLE_CLOUD_PROJECT": "${GOOGLE_CLOUD_PROJECT}"
+      },
+      "description": "Query demand, intent, and marketplace events from BigQuery"
+    },
+    "postgres": {
+      "name": "PostgreSQL MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "${POSTGRES_CONNECTION_STRING}"
+      },
+      "description": "Read/write clinic, vendor, and workforce data"
+    },
+    "filesystem": {
+      "name": "Filesystem MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "env": {
+        "ALLOWED_DIRECTORIES": "${PWD}"
+      },
+      "description": "Full codebase refactor control"
+    },
+    "git": {
+      "name": "Git MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git"],
+      "env": {
+        "GIT_REPO_PATH": "${PWD}"
+      },
+      "description": "GitHub repository browsing + PR context"
+    },
+    "gmail": {
+      "name": "Gmail MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gmail"],
+      "env": {
+        "GMAIL_CLIENT_ID": "${GMAIL_CLIENT_ID}",
+        "GMAIL_CLIENT_SECRET": "${GMAIL_CLIENT_SECRET}",
+        "GMAIL_REFRESH_TOKEN": "${GMAIL_REFRESH_TOKEN}"
+      },
+      "description": "Clinic outreach + vendor communication"
+    },
+    "slack": {
+      "name": "Slack MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "env": {
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_CHANNEL_ID": "${SLACK_CHANNEL_ID}"
+      },
+      "description": "Internal alerts: demand spikes, staffing issues"
+    },
+    "twilio": {
+      "name": "Twilio MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-twilio"],
+      "env": {
+        "TWILIO_ACCOUNT_SID": "${TWILIO_ACCOUNT_SID}",
+        "TWILIO_AUTH_TOKEN": "${TWILIO_AUTH_TOKEN}",
+        "TWILIO_PHONE_NUMBER": "${TWILIO_PHONE_NUMBER}"
+      },
+      "description": "Custom-built SMS activation layer"
+    },
+    "web-search": {
+      "name": "Web Search MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-web-search"],
+      "env": {
+        "SERPER_API_KEY": "${SERPER_API_KEY}"
+      },
+      "description": "Competitor + market research"
+    },
+    "web-fetch": {
+      "name": "Web Fetch MCP",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-web-fetch"],
+      "env": {},
+      "description": "Scrape vendor pricing, clinic sites"
+    },
+    "novalyte-dealflow-mcp": {
+      "name": "Novalyte Dealflow MCP",
+      "type": "http",
+      "url": "http://localhost:3000/api/admin/mcp/dealflow",
+      "env": {},
+      "description": "Daily lead harvesting, market trends, predictive demand"
+    },
+    "novalyte-market-intel-mcp": {
+      "name": "Novalyte Market Intel MCP",
+      "type": "http",
+      "url": "http://localhost:3000/api/admin/mcp/market-intel",
+      "env": {},
+      "description": "Market intelligence and trend analysis"
+    },
+    "novalyte-workforce-mcp": {
+      "name": "Novalyte Workforce MCP",
+      "type": "http",
+      "url": "http://localhost:3000/api/admin/mcp/workforce",
+      "env": {},
+      "description": "Workforce exchange and staffing intelligence"
+    }
+  }
+}
+

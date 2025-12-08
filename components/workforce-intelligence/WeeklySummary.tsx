@@ -21,7 +21,7 @@ export default function WeeklySummary({ summary, loading }: WeeklySummaryProps) 
       <div className="bg-dark-surface border border-dark-border rounded-lg p-6">
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-semibold text-white">This Week's Workforce Summary</h2>
+          <h2 className="text-xl font-semibold text-white">This Week&apos;s Workforce Summary</h2>
         </div>
         <div className="text-gray-400">Generating AI summary...</div>
       </div>

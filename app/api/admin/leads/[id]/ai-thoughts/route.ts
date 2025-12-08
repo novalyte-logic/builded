@@ -25,10 +25,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
     const activityLines =
       lead.activity?.map(
-        (evt) =>
-          `- [${evt.timestamp}] ${evt.type} (${evt.actor}): ${evt.label}${
-            evt.details ? ` — ${evt.details}` : ''
-          }`
+        (evt: { timestamp: string; type: string; actor: string; label: string; details?: string }) =>
+          `- [${evt.timestamp}] ${evt.type} (${evt.actor}): ${evt.label}${evt.details ? ` - ${evt.details}` : ''}`
       ) || []
 
     const instructionBlock = `

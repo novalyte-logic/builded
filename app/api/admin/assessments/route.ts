@@ -100,8 +100,8 @@ export async function POST(request: NextRequest) {
     const assessment = {
       id: body.id || crypto.randomUUID(),
       user_id: body.user_id || null,
-      created_at: body.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: body.created_at ? new Date(body.created_at) : new Date(),
+      updated_at: new Date(),
       status: body.status,
       flow_type: body.flow_type || body.path || 'GENERAL',
       path: body.flow_type || body.path || 'GENERAL', // Legacy alias
@@ -121,7 +121,11 @@ export async function POST(request: NextRequest) {
     // If assessment is completed, trigger AI scoring and lead creation
     if (body.status === 'completed') {
       try {
-        const result = await processAssessmentCompletion(assessment.id, assessment)
+        const result = await processAssessmentCompletion(assessment.id, {
+          ...assessment,
+          created_at: assessment.created_at,
+          updated_at: assessment.updated_at,
+        })
         
         // Update assessment with AI results
         const updatedIndex = assessments.findIndex((a) => a.id === assessment.id)

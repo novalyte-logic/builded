@@ -1,0 +1,616 @@
+{
+  "mcpVersion": "2024-11-05",
+  "serverName": "novalyte-market-intel-mcp",
+  "serverVersion": "2.0.0",
+  "description": "Novalyte Market Intelligence Engine - Treatment trends, competitor analysis, and product performance tracking",
+  "tools": [
+    {
+      "name": "get_treatment_trend_map",
+      "description": "Generate comprehensive treatment trend map across regions with time-window support. Returns trend data, growth rates, regional variations, and market signals.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "treatment": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["TRT", "WEIGHT_LOSS", "GLP-1", "IV_THERAPY", "PEPTIDES", "GENERAL", "ALL"]
+            },
+            "description": "Array of treatment categories to analyze. Use ['ALL'] for all treatments.",
+            "default": ["ALL"],
+            "examples": [["TRT", "GLP-1"], ["IV_THERAPY"], ["ALL"]]
+          },
+          "region": {
+            "type": "string",
+            "description": "Region filter (e.g., 'Texas', 'Miami, FL', 'ALL'). Use 'ALL' for nationwide analysis.",
+            "default": "ALL",
+            "examples": ["Texas", "Miami, FL", "ALL", "CA"]
+          },
+          "timeWindow": {
+            "type": "object",
+            "properties": {
+              "startDate": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for start of analysis window"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for end of analysis window (defaults to now)"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 730,
+                "description": "Number of days to analyze (used if startDate not provided)",
+                "default": 90
+              },
+              "granularity": {
+                "type": "string",
+                "enum": ["daily", "weekly", "monthly"],
+                "description": "Data granularity for trend analysis",
+                "default": "weekly"
+              }
+            },
+            "required": ["days"],
+            "description": "Time window configuration for trend analysis"
+          },
+          "includeProjections": {
+            "type": "boolean",
+            "description": "Include future trend projections based on historical data",
+            "default": false
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Maximum number of trend data points to return",
+            "default": 50
+          }
+        },
+        "required": ["treatment"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "trendMap": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "treatment": {"type": "string"},
+                "region": {"type": "string"},
+                "timePoint": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "ISO 8601 timestamp for this data point"
+                },
+                "metrics": {
+                  "type": "object",
+                  "properties": {
+                    "searchVolume": {
+                      "type": "number",
+                      "description": "Normalized search volume index (0-100)"
+                    },
+                    "demandIndex": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100,
+                      "description": "Demand index score"
+                    },
+                    "growthRate": {
+                      "type": "number",
+                      "description": "Period-over-period growth rate (percentage)"
+                    },
+                    "trend": {
+                      "type": "string",
+                      "enum": ["rising", "stable", "declining", "volatile"]
+                    },
+                    "marketShare": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Estimated market share (0-1)"
+                    }
+                  },
+                  "required": ["searchVolume", "demandIndex", "growthRate", "trend"]
+                },
+                "signals": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["spike", "decline", "seasonal", "emerging", "saturated"]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["high", "medium", "low"]
+                      },
+                      "description": {"type": "string"}
+                    },
+                    "required": ["type", "severity", "description"]
+                  }
+                }
+              },
+              "required": ["treatment", "region", "timePoint", "metrics"]
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalDataPoints": {"type": "integer"},
+              "treatmentsAnalyzed": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "regionsAnalyzed": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "topGrowingTreatment": {
+                "type": "object",
+                "properties": {
+                  "treatment": {"type": "string"},
+                  "growthRate": {"type": "number"},
+                  "region": {"type": "string"}
+                }
+              },
+              "timeWindow": {
+                "type": "object",
+                "properties": {
+                  "startDate": {"type": "string", "format": "date-time"},
+                  "endDate": {"type": "string", "format": "date-time"},
+                  "days": {"type": "integer"}
+                }
+              }
+            },
+            "required": ["totalDataPoints", "treatmentsAnalyzed"]
+          },
+          "projections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "treatment": {"type": "string"},
+                "region": {"type": "string"},
+                "projectedDate": {"type": "string", "format": "date-time"},
+                "projectedValue": {"type": "number"},
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Confidence level of projection (0-1)"
+                }
+              },
+              "required": ["treatment", "region", "projectedDate", "projectedValue", "confidence"]
+            },
+            "description": "Future trend projections (only if includeProjections=true)"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["trendMap", "summary", "generatedAt"]
+      }
+    },
+    {
+      "name": "get_competitor_density",
+      "description": "Analyze competitor density and market saturation by region and treatment category. Returns competitor mapping, market share distribution, and saturation scores.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "Region to analyze (e.g., 'Texas', 'Miami, FL', 'ALL')",
+            "examples": ["Texas", "Miami, FL", "ALL", "CA"]
+          },
+          "treatment": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["TRT", "WEIGHT_LOSS", "GLP-1", "IV_THERAPY", "PEPTIDES", "GENERAL", "ALL"]
+            },
+            "description": "Array of treatment categories to analyze",
+            "default": ["ALL"],
+            "examples": [["TRT", "GLP-1"], ["IV_THERAPY"], ["ALL"]]
+          },
+          "competitorMapping": {
+            "type": "object",
+            "properties": {
+              "includeMarketLeaders": {
+                "type": "boolean",
+                "description": "Include top market leaders in analysis",
+                "default": true
+              },
+              "includeLocalCompetitors": {
+                "type": "boolean",
+                "description": "Include local/regional competitors",
+                "default": true
+              },
+              "minMarketShare": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Minimum market share threshold to include competitor",
+                "default": 0.01
+              },
+              "competitorNames": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific competitor names to track (optional)",
+                "default": []
+              }
+            },
+            "description": "Configuration for competitor identification and mapping"
+          },
+          "timeWindow": {
+            "type": "object",
+            "properties": {
+              "startDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365,
+                "description": "Number of days to analyze",
+                "default": 90
+              }
+            },
+            "required": ["days"]
+          },
+          "includeSaturationScore": {
+            "type": "boolean",
+            "description": "Calculate market saturation score",
+            "default": true
+          }
+        },
+        "required": ["region"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "competitors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "competitorId": {"type": "string"},
+                "competitorName": {"type": "string"},
+                "region": {"type": "string"},
+                "treatments": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                },
+                "marketShare": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Estimated market share (0-1)"
+                },
+                "adSpend": {
+                  "type": "object",
+                  "properties": {
+                    "estimatedMonthly": {"type": "number"},
+                    "trend": {
+                      "type": "string",
+                      "enum": ["increasing", "stable", "decreasing"]
+                    },
+                    "platforms": {
+                      "type": "array",
+                      "items": {"type": "string"}
+                    }
+                  }
+                },
+                "presence": {
+                  "type": "object",
+                  "properties": {
+                    "locations": {"type": "integer"},
+                    "onlinePresence": {
+                      "type": "string",
+                      "enum": ["strong", "moderate", "weak"]
+                    },
+                    "reviewScore": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 5
+                    }
+                  }
+                },
+                "threatLevel": {
+                  "type": "string",
+                  "enum": ["high", "medium", "low"],
+                  "description": "Competitive threat level"
+                }
+              },
+              "required": ["competitorId", "competitorName", "region", "treatments", "marketShare", "threatLevel"]
+            }
+          },
+          "densityMetrics": {
+            "type": "object",
+            "properties": {
+              "totalCompetitors": {"type": "integer"},
+              "marketLeaders": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {"type": "string"},
+                    "marketShare": {"type": "number", "minimum": 0, "maximum": 1}
+                  }
+                }
+              },
+              "marketConcentration": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Herfindahl-Hirschman Index (HHI) - higher = more concentrated"
+              },
+              "saturationScore": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Market saturation score (0 = unsaturated, 100 = fully saturated)"
+              },
+              "opportunityGaps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "treatment": {"type": "string"},
+                    "region": {"type": "string"},
+                    "gapSize": {
+                      "type": "string",
+                      "enum": ["large", "medium", "small"],
+                      "description": "Size of market opportunity gap"
+                    },
+                    "description": {"type": "string"}
+                  }
+                }
+              }
+            },
+            "required": ["totalCompetitors", "marketConcentration"]
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "region": {"type": "string"},
+              "treatmentsAnalyzed": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "timeWindow": {
+                "type": "object",
+                "properties": {
+                  "startDate": {"type": "string", "format": "date-time"},
+                  "endDate": {"type": "string", "format": "date-time"},
+                  "days": {"type": "integer"}
+                }
+              }
+            },
+            "required": ["region"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["competitors", "densityMetrics", "summary", "generatedAt"]
+      }
+    },
+    {
+      "name": "list_high_performing_products",
+      "description": "List high-performing products and services by treatment category with performance metrics, growth trends, and market positioning.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "treatment": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["TRT", "WEIGHT_LOSS", "GLP-1", "IV_THERAPY", "PEPTIDES", "GENERAL", "ALL"]
+            },
+            "description": "Array of treatment categories to filter by",
+            "default": ["ALL"],
+            "examples": [["TRT", "GLP-1"], ["IV_THERAPY"], ["ALL"]]
+          },
+          "region": {
+            "type": "string",
+            "description": "Region filter (optional)",
+            "default": "ALL",
+            "examples": ["Texas", "Miami, FL", "ALL"]
+          },
+          "timeWindow": {
+            "type": "object",
+            "properties": {
+              "startDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365,
+                "description": "Number of days to analyze performance",
+                "default": 90
+              }
+            },
+            "required": ["days"]
+          },
+          "performanceMetrics": {
+            "type": "object",
+            "properties": {
+              "minConversionRate": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Minimum conversion rate threshold",
+                "default": 0.0
+              },
+              "minRevenue": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Minimum revenue threshold",
+                "default": 0
+              },
+              "minGrowthRate": {
+                "type": "number",
+                "description": "Minimum growth rate threshold (percentage)",
+                "default": 0
+              }
+            },
+            "description": "Performance thresholds for filtering products"
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Maximum number of products to return",
+            "default": 50
+          },
+          "sortBy": {
+            "type": "string",
+            "enum": ["revenue", "conversion_rate", "growth_rate", "market_share", "composite_score"],
+            "description": "Sort order for results",
+            "default": "composite_score"
+          }
+        },
+        "required": []
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {"type": "string"},
+                "productName": {"type": "string"},
+                "treatment": {"type": "string"},
+                "region": {"type": "string"},
+                "performance": {
+                  "type": "object",
+                  "properties": {
+                    "revenue": {
+                      "type": "number",
+                      "description": "Total revenue in time window"
+                    },
+                    "conversionRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Conversion rate (0-1)"
+                    },
+                    "growthRate": {
+                      "type": "number",
+                      "description": "Period-over-period growth rate (percentage)"
+                    },
+                    "marketShare": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Market share (0-1)"
+                    },
+                    "compositeScore": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100,
+                      "description": "Composite performance score (0-100)"
+                    },
+                    "trend": {
+                      "type": "string",
+                      "enum": ["rising", "stable", "declining"]
+                    }
+                  },
+                  "required": ["revenue", "conversionRate", "growthRate", "compositeScore", "trend"]
+                },
+                "metrics": {
+                  "type": "object",
+                  "properties": {
+                    "totalLeads": {"type": "integer"},
+                    "totalPatients": {"type": "integer"},
+                    "averageLTV": {
+                      "type": "number",
+                      "description": "Average lifetime value"
+                    },
+                    "retentionRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  }
+                },
+                "positioning": {
+                  "type": "object",
+                  "properties": {
+                    "marketPosition": {
+                      "type": "string",
+                      "enum": ["leader", "challenger", "follower", "niche"]
+                    },
+                    "competitiveAdvantage": {
+                      "type": "array",
+                      "items": {"type": "string"},
+                      "description": "List of competitive advantages"
+                    },
+                    "threats": {
+                      "type": "array",
+                      "items": {"type": "string"},
+                      "description": "List of competitive threats"
+                    }
+                  }
+                },
+                "recommendations": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "description": "Strategic recommendations for this product"
+                }
+              },
+              "required": ["productId", "productName", "treatment", "region", "performance"]
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalProducts": {"type": "integer"},
+              "totalRevenue": {"type": "number"},
+              "averageConversionRate": {"type": "number", "minimum": 0, "maximum": 1},
+              "averageGrowthRate": {"type": "number"},
+              "topPerformer": {
+                "type": "object",
+                "properties": {
+                  "productName": {"type": "string"},
+                  "compositeScore": {"type": "number", "minimum": 0, "maximum": 100}
+                }
+              },
+              "treatmentsAnalyzed": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            },
+            "required": ["totalProducts"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["products", "summary", "generatedAt"]
+      }
+    }
+  ]
+}
+

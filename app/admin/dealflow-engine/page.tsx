@@ -14,6 +14,9 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
+  BarChart3,
+  Download,
+  Zap,
 } from 'lucide-react'
 import clsx from 'clsx'
 import StatusBadge from '@/components/StatusBadge'
@@ -83,6 +86,27 @@ interface DealflowBatch {
   processedAt: string
 }
 
+interface TrendData {
+  region: string
+  interestScore: number
+  trajectory: 'RISING' | 'STABLE' | 'FALLING'
+  trendingQueries: Array<{ query: string; growthScore: number }>
+  risingQueries: Array<{ query: string; growthScore: number }>
+}
+
+interface TrendBasedDealflowResult {
+  serviceLine: string
+  timestamp: string
+  topRegions: Array<{ region: string; interestScore: number; trajectory: string }>
+  clinics: any[]
+  summary: {
+    totalClinics: number
+    goStrong: number
+    warmLead: number
+    avoid: number
+  }
+}
+
 export default function DealFlowEngine() {
   const [region, setRegion] = useState('Texas')
   const [serviceLine, setServiceLine] = useState<DealflowServiceLine>('TRT')
@@ -90,6 +114,12 @@ export default function DealFlowEngine() {
   const [dealflowBatch, setDealflowBatch] = useState<DealflowBatch | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedClinic, setSelectedClinic] = useState<DealflowClinic | null>(null)
+  
+  // Trend analyzer state
+  const [trendLoading, setTrendLoading] = useState(false)
+  const [trendData, setTrendData] = useState<TrendData[]>([])
+  const [trendBasedResult, setTrendBasedResult] = useState<TrendBasedDealflowResult | null>(null)
+  const [showTrendAnalyzer, setShowTrendAnalyzer] = useState(false)
 
   const handleRunScan = async () => {
     setLoading(true)
@@ -170,6 +200,135 @@ export default function DealFlowEngine() {
     }
   }
 
+  const handleGenerateTrendBasedDealflow = async () => {
+    setTrendLoading(true)
+    setError(null)
+    try {
+      const serviceLineMap: Record<string, 'TRT' | 'Weight Loss' | 'IV Therapy'> = {
+        'TRT': 'TRT',
+        'WEIGHT_LOSS': 'Weight Loss',
+        'IV_THERAPY': 'IV Therapy',
+      }
+
+      const response = await fetch('/api/admin/mcp/dealflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'trend_based_dealflow',
+          params: {
+            serviceLine: serviceLineMap[serviceLine] || 'TRT',
+            maxClinics: 20,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate trend-based dealflow')
+      }
+
+      const data = await response.json()
+      setTrendBasedResult(data.results)
+      
+      // Also update main dealflow batch if clinics are returned
+      if (data.results?.clinics) {
+        // Transform trend-based clinics to match DealflowClinic format
+        const transformedClinics = data.results.clinics.map((c: any) => ({
+          clinic: c.clinic,
+          enrichedProfile: c.enrichedProfile,
+          adsSnapshot: c.adsSnapshot,
+          outreachPack: {
+            priorityScore: c.marketStrength.recommendation === 'goStrong' ? 'high' : 
+                          c.marketStrength.recommendation === 'warmLead' ? 'medium' : 'low',
+            priorityReason: c.marketStrength.recommendationReason,
+            whyNow: `Market strength score: ${c.marketStrength.marketStrengthScore}/100`,
+            talkingPoints: [],
+            firstEmail: { subjectLine: '', body: '' },
+            firstLinkedInDM: '',
+            callScriptOpener: '',
+            estimatedValue: c.marketStrength.recommendation === 'goStrong' ? 'High - $50K+ annual potential' : 
+                          c.marketStrength.recommendation === 'warmLead' ? 'Medium - $20-50K annual potential' : 
+                          'Low - <$20K annual potential',
+          },
+          priorityScore: c.marketStrength.recommendation === 'goStrong' ? 'high' : 
+                        c.marketStrength.recommendation === 'warmLead' ? 'medium' : 'low',
+          estimatedValue: c.marketStrength.recommendation === 'goStrong' ? 'High - $50K+ annual potential' : 
+                        c.marketStrength.recommendation === 'warmLead' ? 'Medium - $20-50K annual potential' : 
+                        'Low - <$20K annual potential',
+          processedAt: new Date().toISOString(),
+        }))
+
+        setDealflowBatch({
+          clinics: transformedClinics,
+          totalProcessed: transformedClinics.length,
+          summary: {
+            highPriority: data.results.summary.goStrong,
+            mediumPriority: data.results.summary.warmLead,
+            lowPriority: data.results.summary.avoid,
+            withAds: transformedClinics.filter((c: any) => c.adsSnapshot.isRunningAds).length,
+            withoutAds: transformedClinics.filter((c: any) => !c.adsSnapshot.isRunningAds).length,
+            estimatedTotalValue: `$${data.results.summary.goStrong * 50 + data.results.summary.warmLead * 30}K+`,
+          },
+          region: data.results.topRegions.map((r: any) => r.region).join(', '),
+          serviceLine,
+          processedAt: data.results.timestamp,
+        })
+      }
+    } catch (error) {
+      console.error('Trend-based dealflow error:', error)
+      setError(error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      setTrendLoading(false)
+    }
+  }
+
+  const handleScanTrends = async () => {
+    setTrendLoading(true)
+    setError(null)
+    try {
+      const topStates = ['Texas', 'Florida', 'California', 'New York', 'Arizona', 'Nevada']
+      const serviceLineMap: Record<string, 'TRT' | 'Weight Loss' | 'IV Therapy'> = {
+        'TRT': 'TRT',
+        'WEIGHT_LOSS': 'Weight Loss',
+        'IV_THERAPY': 'IV Therapy',
+      }
+
+      const scans = await Promise.all(
+        topStates.slice(0, 6).map(async (state) => {
+          try {
+            const response = await fetch('/api/admin/mcp/dealflow', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tool: 'google_trends_region_scan',
+                params: {
+                  region: state,
+                  serviceLine: serviceLineMap[serviceLine] || 'TRT',
+                },
+              }),
+            })
+
+            if (response.ok) {
+              const data = await response.json()
+              return data.results
+            }
+            return null
+          } catch (error) {
+            console.error(`Error scanning ${state}:`, error)
+            return null
+          }
+        })
+      )
+
+      const validScans = scans.filter(Boolean) as TrendData[]
+      setTrendData(validScans.sort((a, b) => b.interestScore - a.interestScore))
+    } catch (error) {
+      console.error('Trend scan error:', error)
+      setError(error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      setTrendLoading(false)
+    }
+  }
+
   const detectFunnelWeaknesses = (clinic: DealflowClinic): string[] => {
     const weaknesses: string[] = []
 
@@ -220,6 +379,189 @@ export default function DealFlowEngine() {
           </div>
           <StatusBadge status="live" />
         </div>
+      </div>
+
+      {/* Market Trend Analyzer Panel */}
+      <div className="mb-6 bg-gradient-to-r from-purple-500/10 to-primary/10 border border-purple-500/30 rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <BarChart3 className="w-6 h-6 text-purple-400" />
+            <div>
+              <h2 className="text-lg font-semibold text-white">Market Trend Analyzer</h2>
+              <p className="text-sm text-gray-400">Real-time opportunity radar for fast-moving revenue pockets</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowTrendAnalyzer(!showTrendAnalyzer)}
+            className="px-4 py-2 bg-purple-500/20 border border-purple-500/40 rounded-lg text-sm text-purple-300 hover:bg-purple-500/30 transition-colors"
+          >
+            {showTrendAnalyzer ? 'Hide' : 'Show'} Analyzer
+          </button>
+        </div>
+
+        {showTrendAnalyzer && (
+          <div className="space-y-4">
+            {/* State Heatmap */}
+            <div className="bg-dark-surface border border-dark-border rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-white mb-3">State Heatmap</h3>
+              {trendData.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {trendData.map((trend, idx) => (
+                    <div
+                      key={idx}
+                      className={clsx(
+                        'p-3 rounded-lg border',
+                        trend.trajectory === 'RISING' && 'bg-status-live/10 border-status-live/30',
+                        trend.trajectory === 'STABLE' && 'bg-gray-500/10 border-gray-500/30',
+                        trend.trajectory === 'FALLING' && 'bg-status-degraded/10 border-status-degraded/30'
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-white">{trend.region}</span>
+                        <span className="text-xs text-gray-400">{trend.interestScore}/100</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <TrendingUp
+                          className={clsx(
+                            'w-3 h-3',
+                            trend.trajectory === 'RISING' && 'text-status-live',
+                            trend.trajectory === 'FALLING' && 'text-status-degraded rotate-180',
+                            trend.trajectory === 'STABLE' && 'text-gray-400'
+                          )}
+                        />
+                        <span className="text-xs text-gray-300 capitalize">{trend.trajectory}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">Click "Scan Trends" to load state heatmap</p>
+              )}
+            </div>
+
+            {/* Top Rising Keywords */}
+            {trendData.length > 0 && (
+              <div className="bg-dark-surface border border-dark-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Top Rising Keywords</h3>
+                <div className="space-y-2">
+                  {trendData
+                    .flatMap(t => t.risingQueries)
+                    .sort((a, b) => b.growthScore - a.growthScore)
+                    .slice(0, 5)
+                    .map((query, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-dark-accent rounded">
+                        <span className="text-sm text-white">{query.query}</span>
+                        <span className="text-xs text-status-live font-medium">+{query.growthScore}%</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recommended Regions */}
+            {trendData.length > 0 && (
+              <div className="bg-dark-surface border border-dark-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Recommended Regions to Attack</h3>
+                <div className="space-y-2">
+                  {trendData
+                    .filter(t => t.trajectory === 'RISING' && t.interestScore >= 70)
+                    .slice(0, 3)
+                    .map((trend, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-gradient-to-r from-primary/10 to-purple-500/10 border border-primary/30 rounded">
+                        <div>
+                          <span className="text-sm font-semibold text-white">{trend.region}</span>
+                          <span className="text-xs text-gray-400 ml-2">Interest: {trend.interestScore}/100</span>
+                        </div>
+                        <Zap className="w-4 h-4 text-primary" />
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleScanTrends}
+                disabled={trendLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {trendLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Scanning...
+                  </>
+                ) : (
+                  <>
+                    <BarChart3 className="w-4 h-4" />
+                    Scan Trends
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleGenerateTrendBasedDealflow}
+                disabled={trendLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {trendLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    Generate Trend-Based Dealflow
+                  </>
+                )}
+              </button>
+              {trendBasedResult && (
+                <button
+                  onClick={() => {
+                    const dataStr = JSON.stringify(trendBasedResult, null, 2)
+                    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+                    const url = URL.createObjectURL(dataBlob)
+                    const link = document.createElement('a')
+                    link.href = url
+                    link.download = `trend-dealflow-${new Date().toISOString()}.json`
+                    link.click()
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-dark-accent border border-dark-border text-white rounded-lg hover:bg-dark-hover transition-colors font-medium"
+                >
+                  <Download className="w-4 h-4" />
+                  Export Opportunities
+                </button>
+              )}
+            </div>
+
+            {/* Trend-Based Result Summary */}
+            {trendBasedResult && (
+              <div className="bg-gradient-to-r from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-white mb-2">Trend-Based Dealflow Generated</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <div className="text-gray-400">Total Clinics</div>
+                    <div className="text-white font-semibold">{trendBasedResult.summary.totalClinics}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400">Go Strong</div>
+                    <div className="text-status-live font-semibold">{trendBasedResult.summary.goStrong}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400">Warm Leads</div>
+                    <div className="text-status-degraded font-semibold">{trendBasedResult.summary.warmLead}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400">Top Regions</div>
+                    <div className="text-white font-semibold">
+                      {trendBasedResult.topRegions.map(r => r.region).join(', ')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Filters */}

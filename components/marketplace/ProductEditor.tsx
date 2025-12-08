@@ -253,7 +253,7 @@ export default function ProductEditor({ productId, onSave, onCancel }: ProductEd
                     className="w-full bg-dark-accent border border-dark-border rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
                   >
                     <option value="Patient">Patient</option>
-                    <option value="Men's Clinic">Men's Clinic</option>
+                    <option value="Men's Clinic">Men&apos;s Clinic</option>
                     <option value="Both">Both</option>
                   </select>
                 </div>

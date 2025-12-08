@@ -197,7 +197,7 @@ export default function MessageThreadList({
             >
               <option value="">All Types</option>
               <option value="patient">Patient</option>
-              <option value="mens_clinic">Men's Clinic</option>
+              <option value="mens_clinic">Men&apos;s Clinic</option>
               <option value="vendor">Vendor</option>
               <option value="unknown">Unknown</option>
             </select>

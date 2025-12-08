@@ -1,0 +1,716 @@
+{
+  "mcpVersion": "2024-11-05",
+  "serverName": "novalyte-workforce-mcp",
+  "serverVersion": "2.0.0",
+  "description": "Novalyte Workforce Exchange - Staff availability, shift matching, and staffing gap alerts",
+  "tools": [
+    {
+      "name": "find_available_staff",
+      "description": "Find available clinical staff by region, skills, and availability windows. Returns staff profiles with qualifications, availability, and match scores.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "Region keyword for staff search (e.g., 'Texas', 'Miami', 'CA', 'Dallas-Fort Worth')",
+            "examples": ["Texas", "Miami, FL", "CA", "Dallas-Fort Worth", "ALL"]
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["TRT", "GLP-1", "IV_THERAPY", "PEPTIDES", "INJECTIONS", "PHLEBOTOMY", "PATIENT_ASSESSMENT", "TELEHEALTH", "GENERAL"]
+            },
+            "description": "Array of required skills. Empty array returns all staff regardless of skills.",
+            "default": [],
+            "examples": [["TRT", "IV_THERAPY"], ["GLP-1", "INJECTIONS"], []]
+          },
+          "roleTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["RN", "NP", "PA", "LPN", "MA", "MD", "OTHER"]
+            },
+            "description": "Array of role types to filter by. Empty array returns all roles.",
+            "default": [],
+            "examples": [["RN", "NP"], ["MA"], []]
+          },
+          "availabilityWindow": {
+            "type": "object",
+            "properties": {
+              "startTime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for start of availability window"
+              },
+              "endTime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for end of availability window"
+              },
+              "recurring": {
+                "type": "object",
+                "properties": {
+                  "daysOfWeek": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 6,
+                      "description": "0=Sunday, 1=Monday, ..., 6=Saturday"
+                    }
+                  },
+                  "timeOfDay": {
+                    "type": "string",
+                    "enum": ["morning", "afternoon", "evening", "night", "any"]
+                  }
+                },
+                "description": "Recurring availability pattern"
+              }
+            },
+            "description": "Availability window for staff search"
+          },
+          "employmentType": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["TEMP", "PER_DIEM", "CONTRACT", "FULL_TIME", "PART_TIME"]
+            },
+            "description": "Array of employment types. Empty array returns all types.",
+            "default": [],
+            "examples": [["TEMP", "PER_DIEM"], ["CONTRACT"], []]
+          },
+          "minExperience": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50,
+            "description": "Minimum years of experience required",
+            "default": 0
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Maximum number of staff members to return",
+            "default": 50
+          },
+          "includeMatchScore": {
+            "type": "boolean",
+            "description": "Include match score calculation based on skills and availability",
+            "default": true
+          }
+        },
+        "required": ["region"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "staff": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "staffId": {"type": "string"},
+                "displayName": {"type": "string"},
+                "roleType": {"type": "string"},
+                "yearsExperience": {"type": "integer"},
+                "region": {"type": "string"},
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "city": {"type": "string"},
+                    "state": {"type": "string"},
+                    "country": {"type": "string", "default": "US"}
+                  },
+                  "required": ["city", "state"]
+                },
+                "skills": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                },
+                "certifications": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                },
+                "availability": {
+                  "type": "object",
+                  "properties": {
+                    "startTime": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp for availability start"
+                    },
+                    "endTime": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp for availability end"
+                    },
+                    "recurring": {
+                      "type": "object",
+                      "properties": {
+                        "daysOfWeek": {
+                          "type": "array",
+                          "items": {"type": "integer", "minimum": 0, "maximum": 6}
+                        },
+                        "timeOfDay": {"type": "string"}
+                      }
+                    },
+                    "timezone": {"type": "string"}
+                  },
+                  "required": ["startTime", "endTime"]
+                },
+                "employmentType": {"type": "string"},
+                "hourlyRate": {
+                  "type": "number",
+                  "description": "Hourly rate (if available)"
+                },
+                "matchScore": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "Match score based on skills and availability (0-100)"
+                },
+                "contactMethod": {
+                  "type": "string",
+                  "enum": ["email", "phone", "linkedin", "internal"],
+                  "description": "Preferred contact method"
+                },
+                "lastUpdated": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": ["staffId", "displayName", "roleType", "yearsExperience", "region", "location", "skills", "availability", "employmentType", "lastUpdated"]
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalFound": {"type": "integer"},
+              "region": {"type": "string"},
+              "skillsSearched": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "roleTypesFound": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "averageMatchScore": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": ["totalFound", "region"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["staff", "summary", "generatedAt"]
+      }
+    },
+    {
+      "name": "match_shifts_to_staff",
+      "description": "Match available shifts to qualified staff members using shift mapping logic. Returns matched pairs with compatibility scores and scheduling recommendations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "shifts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "shiftId": {"type": "string"},
+                "clinicId": {"type": "string"},
+                "clinicName": {"type": "string"},
+                "region": {"type": "string"},
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "city": {"type": "string"},
+                    "state": {"type": "string"},
+                    "address": {"type": "string"}
+                  },
+                  "required": ["city", "state"]
+                },
+                "startTime": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "ISO 8601 timestamp for shift start"
+                },
+                "endTime": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "ISO 8601 timestamp for shift end"
+                },
+                "requiredSkills": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "description": "Required skills for this shift"
+                },
+                "requiredRoleType": {
+                  "type": "string",
+                  "enum": ["RN", "NP", "PA", "LPN", "MA", "MD", "OTHER"]
+                },
+                "treatmentType": {
+                  "type": "string",
+                  "enum": ["TRT", "GLP-1", "IV_THERAPY", "PEPTIDES", "GENERAL"]
+                },
+                "hourlyRate": {"type": "number"},
+                "priority": {
+                  "type": "string",
+                  "enum": ["urgent", "high", "medium", "low"],
+                  "default": "medium"
+                }
+              },
+              "required": ["shiftId", "clinicId", "clinicName", "region", "location", "startTime", "endTime", "requiredRoleType"]
+            },
+            "minItems": 1,
+            "description": "Array of shifts to match"
+          },
+          "staffPool": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "staffId": {"type": "string"},
+                "displayName": {"type": "string"},
+                "roleType": {"type": "string"},
+                "skills": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                },
+                "availability": {
+                  "type": "object",
+                  "properties": {
+                    "startTime": {"type": "string", "format": "date-time"},
+                    "endTime": {"type": "string", "format": "date-time"},
+                    "recurring": {
+                      "type": "object",
+                      "properties": {
+                        "daysOfWeek": {
+                          "type": "array",
+                          "items": {"type": "integer", "minimum": 0, "maximum": 6}
+                        },
+                        "timeOfDay": {"type": "string"}
+                      }
+                    }
+                  },
+                  "required": ["startTime", "endTime"]
+                },
+                "region": {"type": "string"},
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "city": {"type": "string"},
+                    "state": {"type": "string"}
+                  },
+                  "required": ["city", "state"]
+                }
+              },
+              "required": ["staffId", "displayName", "roleType", "skills", "availability", "region", "location"]
+            },
+            "description": "Pool of available staff to match against (optional - will search if not provided)"
+          },
+          "matchingLogic": {
+            "type": "object",
+            "properties": {
+              "requireExactRoleMatch": {
+                "type": "boolean",
+                "description": "Require exact role type match",
+                "default": true
+              },
+              "requireAllSkills": {
+                "type": "boolean",
+                "description": "Require all shift skills to be present in staff",
+                "default": false
+              },
+              "minCompatibilityScore": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Minimum compatibility score to include in results",
+                "default": 50
+              },
+              "preferLocalStaff": {
+                "type": "boolean",
+                "description": "Prefer staff in same city/region",
+                "default": true
+              },
+              "maxTravelDistance": {
+                "type": "number",
+                "description": "Maximum travel distance in miles (0 = no limit)",
+                "default": 0
+              }
+            },
+            "description": "Configuration for shift matching logic"
+          },
+          "maxMatchesPerShift": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "Maximum number of staff matches per shift",
+            "default": 3
+          }
+        },
+        "required": ["shifts"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "shiftId": {"type": "string"},
+                "staffId": {"type": "string"},
+                "compatibilityScore": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "Overall compatibility score (0-100)"
+                },
+                "scoreBreakdown": {
+                  "type": "object",
+                  "properties": {
+                    "roleMatch": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100,
+                      "description": "Role type match score"
+                    },
+                    "skillsMatch": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100,
+                      "description": "Skills match score"
+                    },
+                    "availabilityMatch": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100,
+                      "description": "Availability overlap score"
+                    },
+                    "locationMatch": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100,
+                      "description": "Location proximity score"
+                    }
+                  },
+                  "required": ["roleMatch", "skillsMatch", "availabilityMatch", "locationMatch"]
+                },
+                "shift": {
+                  "type": "object",
+                  "properties": {
+                    "shiftId": {"type": "string"},
+                    "clinicName": {"type": "string"},
+                    "startTime": {"type": "string", "format": "date-time"},
+                    "endTime": {"type": "string", "format": "date-time"},
+                    "treatmentType": {"type": "string"}
+                  }
+                },
+                "staff": {
+                  "type": "object",
+                  "properties": {
+                    "staffId": {"type": "string"},
+                    "displayName": {"type": "string"},
+                    "roleType": {"type": "string"},
+                    "location": {
+                      "type": "object",
+                      "properties": {
+                        "city": {"type": "string"},
+                        "state": {"type": "string"}
+                      }
+                    }
+                  }
+                },
+                "recommendation": {
+                  "type": "string",
+                  "enum": ["strong_match", "good_match", "acceptable_match", "weak_match"],
+                  "description": "Match recommendation level"
+                },
+                "notes": {
+                  "type": "string",
+                  "description": "Additional notes about the match"
+                }
+              },
+              "required": ["shiftId", "staffId", "compatibilityScore", "scoreBreakdown", "shift", "staff", "recommendation"]
+            }
+          },
+          "unmatchedShifts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "shiftId": {"type": "string"},
+                "clinicName": {"type": "string"},
+                "reason": {
+                  "type": "string",
+                  "enum": ["no_qualified_staff", "no_availability", "location_mismatch", "skills_mismatch", "other"]
+                },
+                "suggestions": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "description": "Suggestions for finding matches"
+                }
+              },
+              "required": ["shiftId", "reason"]
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalShifts": {"type": "integer"},
+              "matchedShifts": {"type": "integer"},
+              "unmatchedShifts": {"type": "integer"},
+              "totalMatches": {"type": "integer"},
+              "averageCompatibilityScore": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": ["totalShifts", "matchedShifts", "unmatchedShifts", "totalMatches"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["matches", "unmatchedShifts", "summary", "generatedAt"]
+      }
+    },
+    {
+      "name": "alert_clinic_staffing_gap",
+      "description": "Detect and alert on clinic staffing gaps by analyzing shift coverage, required roles, and available staff. Returns gap analysis with severity levels and recommended actions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "clinicId": {
+            "type": "string",
+            "description": "Specific clinic ID to analyze (optional - if not provided, analyzes all clinics in region)"
+          },
+          "region": {
+            "type": "string",
+            "description": "Region keyword for clinic search (required if clinicId not provided)",
+            "examples": ["Texas", "Miami, FL", "CA", "ALL"]
+          },
+          "timeWindow": {
+            "type": "object",
+            "properties": {
+              "startTime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for start of analysis window"
+              },
+              "endTime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for end of analysis window"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 90,
+                "description": "Number of days to analyze (used if startTime not provided)",
+                "default": 30
+              }
+            },
+            "required": ["days"],
+            "description": "Time window for gap analysis"
+          },
+          "roleTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["RN", "NP", "PA", "LPN", "MA", "MD", "OTHER"]
+            },
+            "description": "Array of role types to analyze. Empty array analyzes all roles.",
+            "default": []
+          },
+          "minGapSeverity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low", "all"],
+            "description": "Minimum gap severity level to include in alerts",
+            "default": "medium"
+          },
+          "includeProjections": {
+            "type": "boolean",
+            "description": "Include projected gaps based on historical patterns",
+            "default": false
+          }
+        },
+        "required": []
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "gaps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "gapId": {"type": "string"},
+                "clinicId": {"type": "string"},
+                "clinicName": {"type": "string"},
+                "region": {"type": "string"},
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "city": {"type": "string"},
+                    "state": {"type": "string"}
+                  },
+                  "required": ["city", "state"]
+                },
+                "gapDetails": {
+                  "type": "object",
+                  "properties": {
+                    "roleType": {"type": "string"},
+                    "requiredCount": {
+                      "type": "integer",
+                      "description": "Number of staff required"
+                    },
+                    "availableCount": {
+                      "type": "integer",
+                      "description": "Number of staff available"
+                    },
+                    "gapCount": {
+                      "type": "integer",
+                      "description": "Number of unfilled positions"
+                    },
+                    "gapPercentage": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100,
+                      "description": "Percentage of unfilled positions"
+                    }
+                  },
+                  "required": ["roleType", "requiredCount", "availableCount", "gapCount", "gapPercentage"]
+                },
+                "timeWindow": {
+                  "type": "object",
+                  "properties": {
+                    "startTime": {"type": "string", "format": "date-time"},
+                    "endTime": {"type": "string", "format": "date-time"}
+                  },
+                  "required": ["startTime", "endTime"]
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": ["critical", "high", "medium", "low"],
+                  "description": "Gap severity level"
+                },
+                "impact": {
+                  "type": "object",
+                  "properties": {
+                    "affectedShifts": {"type": "integer"},
+                    "estimatedRevenueLoss": {"type": "number"},
+                    "patientCapacityReduction": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100,
+                      "description": "Percentage reduction in patient capacity"
+                    }
+                  }
+                },
+                "recommendedActions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "action": {"type": "string"},
+                      "priority": {
+                        "type": "string",
+                        "enum": ["urgent", "high", "medium", "low"]
+                      },
+                      "description": {"type": "string"}
+                    },
+                    "required": ["action", "priority", "description"]
+                  }
+                },
+                "availableStaff": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "staffId": {"type": "string"},
+                      "displayName": {"type": "string"},
+                      "matchScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    }
+                  },
+                  "description": "List of available staff that could fill the gap"
+                },
+                "detectedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": ["gapId", "clinicId", "clinicName", "region", "location", "gapDetails", "timeWindow", "severity", "detectedAt"]
+            }
+          },
+          "projections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "clinicId": {"type": "string"},
+                "clinicName": {"type": "string"},
+                "projectedGap": {
+                  "type": "object",
+                  "properties": {
+                    "roleType": {"type": "string"},
+                    "projectedGapCount": {"type": "integer"},
+                    "projectedDate": {"type": "string", "format": "date-time"},
+                    "confidence": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Projected gaps (only if includeProjections=true)"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalGaps": {"type": "integer"},
+              "criticalGaps": {"type": "integer"},
+              "highGaps": {"type": "integer"},
+              "mediumGaps": {"type": "integer"},
+              "lowGaps": {"type": "integer"},
+              "totalAffectedClinics": {"type": "integer"},
+              "totalAffectedShifts": {"type": "integer"},
+              "estimatedTotalRevenueLoss": {"type": "number"},
+              "region": {"type": "string"},
+              "timeWindow": {
+                "type": "object",
+                "properties": {
+                  "startTime": {"type": "string", "format": "date-time"},
+                  "endTime": {"type": "string", "format": "date-time"}
+                }
+              }
+            },
+            "required": ["totalGaps", "totalAffectedClinics"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["gaps", "summary", "generatedAt"]
+      }
+    }
+  ]
+}
+

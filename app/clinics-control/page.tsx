@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Building2, Plus, AlertTriangle, AlertCircle, ChevronUp, ChevronDown, Search, Sparkles, TrendingUp, Target, ExternalLink, MapPin } from 'lucide-react'
+import { Building2, Plus, AlertTriangle, AlertCircle, ChevronUp, ChevronDown, Search, Sparkles, TrendingUp, Target, ExternalLink, MapPin, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import clsx from 'clsx'
 import StatusBadge from '@/components/StatusBadge'
@@ -474,6 +474,27 @@ export default function ClinicsControlPage() {
             </button>
           </div>
         </div>
+
+        {/* Cross-talk Banner */}
+        {selectedClinic && (
+          <div className="mt-4 bg-primary/10 border border-primary/30 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <p className="text-sm text-gray-300">
+                  Open Market Intel for {selectedClinic.name} ({selectedClinic.city}, {selectedClinic.state})
+                </p>
+              </div>
+              <Link
+                href={`/admin/market-intelligence?clinic=${encodeURIComponent(selectedClinic.name)}&region=${encodeURIComponent(`${selectedClinic.city}, ${selectedClinic.state}`)}&serviceLine=${encodeURIComponent(selectedClinic.specialties[0] || 'TRT')}`}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm"
+              >
+                Open Market Intel
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Warning Banner */}
         <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-start gap-3">

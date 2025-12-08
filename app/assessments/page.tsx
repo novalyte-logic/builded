@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import AssessmentQueue from '@/components/AssessmentQueue'
 import AssessmentDetail from '@/components/AssessmentDetail'
 import StatusBadge from '@/components/StatusBadge'
-import { FileText, Users } from 'lucide-react'
+import { FileText, Users, ArrowRight, TrendingUp } from 'lucide-react'
 
 export default function AssessmentsPage() {
   const [selectedAssessment, setSelectedAssessment] = useState<any | null>(null)
@@ -20,6 +21,27 @@ export default function AssessmentsPage() {
           <StatusBadge status="live" />
         </div>
       </div>
+
+      {/* Cross-talk Banner */}
+      {selectedAssessment && (
+        <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              <p className="text-sm text-gray-300">
+                View demand forecast for {selectedAssessment.path || 'this flow'}
+              </p>
+            </div>
+            <Link
+              href={`/admin/insights/demand?serviceLine=${encodeURIComponent(selectedAssessment.path || 'ALL')}`}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm"
+            >
+              View Demand Forecast
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Assessment Queue */}

@@ -1,0 +1,518 @@
+{
+  "mcpVersion": "2024-11-05",
+  "serverName": "novalyte-dealflow-mcp",
+  "serverVersion": "2.0.0",
+  "description": "Novalyte Dealflow Intelligence Engine - Clinic pipeline analysis, regional demand tracking, and opportunity ranking",
+  "tools": [
+    {
+      "name": "get_clinic_pipeline",
+      "description": "Retrieve clinic pipeline data with filtering by region, treatment types, and lookback window. Returns clinic details, pipeline stages, conversion metrics, and opportunity signals.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "Region filter (e.g., 'Texas', 'Miami, FL', 'SoCal', 'CA'). Supports state codes, city+state, or full state names.",
+            "examples": ["Texas", "Miami, FL", "California", "CA"]
+          },
+          "treatment": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["TRT", "WEIGHT_LOSS", "GLP-1", "IV_THERAPY", "PEPTIDES", "GENERAL"]
+            },
+            "description": "Array of treatment types to filter by. Empty array returns all treatments.",
+            "default": [],
+            "examples": [["TRT", "GLP-1"], ["IV_THERAPY"], []]
+          },
+          "lookbackWindow": {
+            "type": "object",
+            "properties": {
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365,
+                "description": "Number of days to look back",
+                "default": 30
+              },
+              "startDate": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for start of window (optional, overrides days if provided)"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for end of window (defaults to now if not provided)"
+              }
+            },
+            "required": ["days"],
+            "description": "Time window for pipeline data analysis"
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Maximum number of clinics to return",
+            "default": 50
+          },
+          "includeMetrics": {
+            "type": "boolean",
+            "description": "Include detailed conversion metrics and funnel analysis",
+            "default": true
+          },
+          "pipelineStages": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["lead", "assessment", "consultation", "patient", "closed"]
+            },
+            "description": "Filter by specific pipeline stages. Empty array returns all stages.",
+            "default": []
+          }
+        },
+        "required": ["region"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "clinics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "clinicId": {
+                  "type": "string",
+                  "description": "Unique clinic identifier"
+                },
+                "clinicName": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "city": {"type": "string"},
+                    "state": {"type": "string"},
+                    "country": {"type": "string", "default": "US"}
+                  },
+                  "required": ["city", "state"]
+                },
+                "treatments": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                },
+                "pipeline": {
+                  "type": "object",
+                  "properties": {
+                    "leads": {
+                      "type": "object",
+                      "properties": {
+                        "count": {"type": "integer"},
+                        "trend": {"type": "string", "enum": ["up", "down", "stable"]},
+                        "lastUpdated": {"type": "string", "format": "date-time"}
+                      }
+                    },
+                    "assessments": {
+                      "type": "object",
+                      "properties": {
+                        "count": {"type": "integer"},
+                        "conversionRate": {"type": "number", "minimum": 0, "maximum": 1},
+                        "trend": {"type": "string", "enum": ["up", "down", "stable"]},
+                        "lastUpdated": {"type": "string", "format": "date-time"}
+                      }
+                    },
+                    "patients": {
+                      "type": "object",
+                      "properties": {
+                        "count": {"type": "integer"},
+                        "conversionRate": {"type": "number", "minimum": 0, "maximum": 1},
+                        "trend": {"type": "string", "enum": ["up", "down", "stable"]},
+                        "lastUpdated": {"type": "string", "format": "date-time"}
+                      }
+                    }
+                  },
+                  "required": ["leads", "assessments", "patients"]
+                },
+                "opportunitySignals": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["high_conversion", "low_conversion", "growing_demand", "declining_demand", "capacity_gap"]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["high", "medium", "low"]
+                      },
+                      "description": {"type": "string"}
+                    },
+                    "required": ["type", "severity", "description"]
+                  }
+                },
+                "lastUpdated": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": ["clinicId", "clinicName", "region", "location", "treatments", "pipeline", "lastUpdated"]
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalClinics": {"type": "integer"},
+              "totalLeads": {"type": "integer"},
+              "totalAssessments": {"type": "integer"},
+              "totalPatients": {"type": "integer"},
+              "averageConversionRate": {"type": "number", "minimum": 0, "maximum": 1},
+              "region": {"type": "string"},
+              "lookbackWindow": {
+                "type": "object",
+                "properties": {
+                  "startDate": {"type": "string", "format": "date-time"},
+                  "endDate": {"type": "string", "format": "date-time"},
+                  "days": {"type": "integer"}
+                }
+              }
+            },
+            "required": ["totalClinics", "region"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["clinics", "summary", "generatedAt"]
+      }
+    },
+    {
+      "name": "get_regional_demand_spikes",
+      "description": "Identify regional demand spikes for specific treatments within a lookback window. Returns spike detection, trend analysis, and opportunity scoring.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "Region to analyze (e.g., 'Texas', 'Miami, FL', 'SoCal'). Use 'ALL' for nationwide analysis.",
+            "examples": ["Texas", "Miami, FL", "ALL", "CA"]
+          },
+          "treatment": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["TRT", "WEIGHT_LOSS", "GLP-1", "IV_THERAPY", "PEPTIDES", "GENERAL"]
+            },
+            "description": "Array of treatment types to analyze. Empty array analyzes all treatments.",
+            "default": [],
+            "examples": [["TRT", "GLP-1"], ["IV_THERAPY"], []]
+          },
+          "lookbackWindow": {
+            "type": "object",
+            "properties": {
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365,
+                "description": "Number of days to look back for spike detection",
+                "default": 30
+              },
+              "startDate": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for start of window"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp for end of window"
+              }
+            },
+            "required": ["days"],
+            "description": "Time window for spike detection"
+          },
+          "spikeThreshold": {
+            "type": "number",
+            "minimum": 1.0,
+            "maximum": 10.0,
+            "description": "Multiplier threshold for spike detection (e.g., 1.5 = 50% increase)",
+            "default": 1.5
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum number of spikes to return",
+            "default": 20
+          },
+          "includeSubRegions": {
+            "type": "boolean",
+            "description": "Break down spikes by city/sub-region within the main region",
+            "default": false
+          }
+        },
+        "required": ["region"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "spikes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "region": {"type": "string"},
+                "treatment": {"type": "string"},
+                "spikeMagnitude": {
+                  "type": "number",
+                  "description": "Multiplier of baseline (e.g., 2.5 = 250% of baseline)"
+                },
+                "baselineValue": {"type": "number"},
+                "currentValue": {"type": "number"},
+                "trend": {
+                  "type": "string",
+                  "enum": ["spiking", "sustained_high", "declining", "volatile"]
+                },
+                "detectedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "duration": {
+                  "type": "integer",
+                  "description": "Days the spike has been sustained"
+                },
+                "opportunityScore": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "Opportunity score based on magnitude, duration, and market factors"
+                },
+                "recommendedAction": {"type": "string"}
+              },
+              "required": ["region", "treatment", "spikeMagnitude", "baselineValue", "currentValue", "trend", "detectedAt", "opportunityScore"]
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalSpikes": {"type": "integer"},
+              "highestSpike": {
+                "type": "object",
+                "properties": {
+                  "region": {"type": "string"},
+                  "treatment": {"type": "string"},
+                  "magnitude": {"type": "number"}
+                }
+              },
+              "region": {"type": "string"},
+              "lookbackWindow": {
+                "type": "object",
+                "properties": {
+                  "startDate": {"type": "string", "format": "date-time"},
+                  "endDate": {"type": "string", "format": "date-time"},
+                  "days": {"type": "integer"}
+                }
+              }
+            },
+            "required": ["totalSpikes", "region"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["spikes", "summary", "generatedAt"]
+      }
+    },
+    {
+      "name": "rank_clinics_by_opportunity",
+      "description": "Rank clinics by revenue opportunity score based on pipeline data, demand signals, conversion rates, and market factors. Returns prioritized list with scoring rationale.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "Region filter for clinic ranking",
+            "examples": ["Texas", "Miami, FL", "ALL"]
+          },
+          "treatment": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["TRT", "WEIGHT_LOSS", "GLP-1", "IV_THERAPY", "PEPTIDES", "GENERAL"]
+            },
+            "description": "Array of treatment types to prioritize",
+            "default": [],
+            "examples": [["TRT", "GLP-1"], []]
+          },
+          "lookbackWindow": {
+            "type": "object",
+            "properties": {
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365,
+                "description": "Number of days to analyze for ranking",
+                "default": 90
+              },
+              "startDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": ["days"]
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Maximum number of ranked clinics to return",
+            "default": 50
+          },
+          "scoringFactors": {
+            "type": "object",
+            "properties": {
+              "pipelineVolume": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Weight for pipeline volume in scoring (0-1)",
+                "default": 0.3
+              },
+              "conversionRate": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Weight for conversion rate in scoring (0-1)",
+                "default": 0.25
+              },
+              "demandTrend": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Weight for demand trend in scoring (0-1)",
+                "default": 0.25
+              },
+              "marketOpportunity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Weight for market opportunity in scoring (0-1)",
+                "default": 0.2
+              }
+            },
+            "description": "Custom weights for scoring factors (should sum to ~1.0)"
+          },
+          "minOpportunityScore": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Minimum opportunity score to include in results",
+            "default": 0
+          }
+        },
+        "required": ["region"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "rankedClinics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rank": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Ranking position (1 = highest opportunity)"
+                },
+                "clinicId": {"type": "string"},
+                "clinicName": {"type": "string"},
+                "region": {"type": "string"},
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "city": {"type": "string"},
+                    "state": {"type": "string"},
+                    "country": {"type": "string", "default": "US"}
+                  },
+                  "required": ["city", "state"]
+                },
+                "opportunityScore": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "Overall opportunity score (0-100)"
+                },
+                "scoreBreakdown": {
+                  "type": "object",
+                  "properties": {
+                    "pipelineVolume": {"type": "number", "minimum": 0, "maximum": 100},
+                    "conversionRate": {"type": "number", "minimum": 0, "maximum": 100},
+                    "demandTrend": {"type": "number", "minimum": 0, "maximum": 100},
+                    "marketOpportunity": {"type": "number", "minimum": 0, "maximum": 100}
+                  },
+                  "required": ["pipelineVolume", "conversionRate", "demandTrend", "marketOpportunity"]
+                },
+                "treatments": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                },
+                "keyMetrics": {
+                  "type": "object",
+                  "properties": {
+                    "totalLeads": {"type": "integer"},
+                    "totalAssessments": {"type": "integer"},
+                    "totalPatients": {"type": "integer"},
+                    "conversionRate": {"type": "number", "minimum": 0, "maximum": 1},
+                    "demandTrend": {
+                      "type": "string",
+                      "enum": ["rising", "stable", "declining"]
+                    }
+                  }
+                },
+                "rationale": {
+                  "type": "string",
+                  "description": "Explanation of why this clinic ranks at this position"
+                },
+                "recommendedAction": {
+                  "type": "string",
+                  "description": "Suggested next step for this opportunity"
+                }
+              },
+              "required": ["rank", "clinicId", "clinicName", "region", "location", "opportunityScore", "scoreBreakdown", "treatments", "rationale"]
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalRanked": {"type": "integer"},
+              "averageScore": {"type": "number", "minimum": 0, "maximum": 100},
+              "topScore": {"type": "number", "minimum": 0, "maximum": 100},
+              "region": {"type": "string"},
+              "scoringFactors": {
+                "type": "object",
+                "description": "Weights used for scoring"
+              }
+            },
+            "required": ["totalRanked", "region"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["rankedClinics", "summary", "generatedAt"]
+      }
+    }
+  ]
+}
+
