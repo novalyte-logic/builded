@@ -44,6 +44,7 @@ interface MarketIntelResult {
     topRegions: Array<{ region: string; interestIndex: number }>
     risingQueries: Array<{ query: string; growthScore: number }>
   }
+  trendsError?: string
   trendSummary?: string
   trendConfidence?: number
   firstMove?: string
@@ -269,7 +270,7 @@ export default function ClinicsControlPage() {
       const data = await response.json()
       
       // Map to result format
-      const { regionDemand, clinicMatches, trendsData: trends, analysis } = data
+      const { regionDemand, clinicMatches, trendsData: trends, trendsError: trendsErr, analysis } = data
       
       const result: MarketIntelResult = {
         interpretedQuestion: analysis.interpretedQuestion,
@@ -288,7 +289,8 @@ export default function ClinicsControlPage() {
           trend: rd.trend === 'RISING' ? 'Rising' : rd.trend === 'FALLING' ? 'Falling' : 'Stable',
           sampleSize: rd.sample_size,
         })),
-        trendsData: trends,
+        trendsData: trends || undefined,
+        trendsError: trendsErr || undefined,
         trendSummary: analysis.trendSummary,
         trendConfidence: analysis.trendConfidence,
         firstMove: analysis.firstMove,
@@ -726,6 +728,17 @@ export default function ClinicsControlPage() {
                     </div>
 
                     {/* Local Trends Signal */}
+                    {marketIntelResult.trendsError && !marketIntelResult.trendsData && (
+                      <div className="bg-dark-accent border border-yellow-500/30 rounded-lg p-4">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-yellow-500" />
+                          <p className="text-xs text-gray-300">
+                            Trends signal unavailable. BigQuery demand + clinics still loaded.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     {marketIntelResult.trendsData && (
                       <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
                         <div className="flex items-center justify-between mb-3">

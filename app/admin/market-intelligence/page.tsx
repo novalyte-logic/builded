@@ -64,6 +64,7 @@ export default function MarketIntelligencePage() {
   const [actionRecommendations, setActionRecommendations] = useState<string[]>([])
   const [trendsData, setTrendsData] = useState<GoogleTrendsData | null>(null)
   const [trendAnalysis, setTrendAnalysis] = useState<TrendAnalysis | null>(null)
+  const [trendsError, setTrendsError] = useState<string | null>(null)
 
   const generateMockResponse = (question: string) => {
     // Determine service line from query
@@ -182,7 +183,7 @@ export default function MarketIntelligencePage() {
       const data = await response.json()
       
       // Convert API response to UI format
-      const { serviceLine, regionDemand, clinicMatches, trendsData: trends, analysis } = data
+      const { serviceLine, regionDemand, clinicMatches, trendsData: trends, trendsError: trendsErr, analysis } = data
       
       // Map region demand data to table format
       const demandTableData: DemandRegion[] = regionDemand.map((r: any) => ({
@@ -215,9 +216,13 @@ export default function MarketIntelligencePage() {
       setTargetClinics(clinicsTableData)
       setActionRecommendations([analysis.primaryMove, ...analysis.secondaryMoves])
       
-      // Set trends data
+      // Set trends data and error
       if (trends) {
         setTrendsData(trends)
+        setTrendsError(null)
+      } else if (trendsErr) {
+        setTrendsData(null)
+        setTrendsError(trendsErr)
       }
       
       // Set trend analysis
@@ -268,7 +273,7 @@ export default function MarketIntelligencePage() {
       const data = await response.json()
       
       // Convert API response to UI format
-      const { serviceLine, regionDemand, clinicMatches, trendsData: trends, analysis } = data
+      const { serviceLine, regionDemand, clinicMatches, trendsData: trends, trendsError: trendsErr, analysis } = data
       
       // Map region demand data to table format
       const demandTableData: DemandRegion[] = regionDemand.map((r: any) => ({
@@ -301,9 +306,13 @@ export default function MarketIntelligencePage() {
       setTargetClinics(clinicsTableData)
       setActionRecommendations([analysis.primaryMove, ...analysis.secondaryMoves])
       
-      // Set trends data
+      // Set trends data and error
       if (trends) {
         setTrendsData(trends)
+        setTrendsError(null)
+      } else if (trendsErr) {
+        setTrendsData(null)
+        setTrendsError(trendsErr)
       }
       
       // Set trend analysis
@@ -447,6 +456,17 @@ export default function MarketIntelligencePage() {
           </div>
 
           {/* Google Trends Signal */}
+          {trendsError && !trendsData && (
+            <div className="bg-dark-surface border border-yellow-500/30 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-yellow-500" />
+                <p className="text-sm text-gray-300">
+                  Trends signal unavailable. BigQuery demand + clinics still loaded.
+                </p>
+              </div>
+            </div>
+          )}
+          
           {trendsData && (
             <div className="bg-dark-surface border border-dark-border rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">

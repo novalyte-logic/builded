@@ -204,22 +204,31 @@ async function handleOrchestration(question: string, params: any) {
     region,
   })
 
-  // Step 3: Fetch Google Trends data
+  // Step 3: Fetch Google Trends data (gracefully handle failures)
   console.log(`[MCP] Step 3: Fetching Google Trends for ${inferredServiceLine} in ${trendsRegion}`)
-  const trendsData = await fetchGoogleTrends({
-    serviceLine: inferredServiceLine as TrendServiceLine,
-    region: trendsRegion,
-    timeRange: timeRange || 'now 30-d',
-  })
+  let trendsData = null
+  let trendsError = null
+  
+  try {
+    trendsData = await fetchGoogleTrends({
+      serviceLine: inferredServiceLine as TrendServiceLine,
+      region: trendsRegion,
+      timeRange: timeRange || 'now 30-d',
+    })
+  } catch (error) {
+    console.warn(`[MCP] Google Trends fetch failed (continuing without trends):`, error)
+    trendsError = error instanceof Error ? error.message : 'Unknown error'
+    // Continue without trends data - BigQuery demand and clinics still work
+  }
 
-  // Step 4: Analyze with Vertex AI (including trends)
-  console.log(`[MCP] Step 4: Analyzing market data with Vertex AI (including trends)`)
+  // Step 4: Analyze with Vertex AI (including trends if available)
+  console.log(`[MCP] Step 4: Analyzing market data with Vertex AI ${trendsData ? '(including trends)' : '(trends unavailable)'}`)
   const analysis = await analyzeMarket({
     question,
     serviceLine: inferredServiceLine,
     regionDemand,
     clinicMatches,
-    trendsData,
+    trendsData: trendsData || undefined,
   })
 
   // Return complete orchestrated response
@@ -229,6 +238,7 @@ async function handleOrchestration(question: string, params: any) {
     regionDemand,
     clinicMatches,
     trendsData,
+    trendsError,
     analysis,
   })
 }
