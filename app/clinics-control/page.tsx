@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Building2, Plus, AlertTriangle, AlertCircle, ChevronUp, ChevronDown, Search, Sparkles, TrendingUp, Target, ExternalLink, MapPin } from 'lucide-react'
 import Link from 'next/link'
 import clsx from 'clsx'
@@ -90,6 +90,129 @@ export default function ClinicsControlPage() {
     fetchClinics()
   }, [])
 
+  // Fetch ads activity and outreach strategy
+  const fetchAdsActivityAndOutreach = useCallback(async () => {
+    const currentClinic = clinics.find((c) => c.id === selectedClinicId) || null
+    if (!currentClinic) return
+
+    setLoadingAdsIntel(true)
+    setAdsIntelError(null)
+
+    try {
+      // Build clinic profile
+      const clinicProfile = {
+        name: currentClinic.name,
+        location: {
+          city: currentClinic.city,
+          state: currentClinic.state,
+        },
+        serviceLines: currentClinic.specialties || [],
+        priceBand: currentClinic.price_band || '$$',
+        leadStatus: (currentClinic as any).lead_status || 'actively_accepting',
+      }
+
+      // Determine primary service line
+      const primaryServiceLine = currentClinic.specialties?.[0] || 'GENERAL'
+      const serviceLineMap: Record<string, string> = {
+        'TRT': 'TRT',
+        'GLP-1': 'WEIGHT_LOSS',
+        'Weight Loss': 'WEIGHT_LOSS',
+        'IV Therapy': 'IV_THERAPY',
+        'IV': 'IV_THERAPY',
+      }
+      const mappedServiceLine = serviceLineMap[primaryServiceLine] || 'GENERAL'
+
+      // Build region string
+      const region = currentClinic.state ? `US-${currentClinic.state}` : undefined
+
+      // Step 1: Fetch ads activity
+      const adsResponse = await fetch('/api/admin/mcp/market-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'ads_intel_clinic_activity',
+          params: {
+            clinicName: currentClinic.name,
+            domain: (currentClinic as any).website_url || undefined,
+            region,
+            serviceLine: mappedServiceLine,
+          },
+        }),
+      })
+
+      if (!adsResponse.ok) {
+        throw new Error('Failed to fetch ads activity')
+      }
+
+      const adsData = await adsResponse.json()
+      const adsActivityResult = adsData.results
+      setAdsActivity(adsActivityResult)
+
+      // Step 2: Optionally fetch market demand
+      let marketDemand = null
+      if (region && mappedServiceLine !== 'GENERAL') {
+        try {
+          const demandResponse = await fetch('/api/admin/mcp/market-intel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tool: 'bigquery_region_demand',
+              params: {
+                serviceLine: mappedServiceLine,
+              },
+            }),
+          })
+
+          if (demandResponse.ok) {
+            const demandData = await demandResponse.json()
+            const regionDemand = demandData.results.find((r: any) => 
+              r.region === currentClinic.state || r.region.includes(currentClinic.state)
+            )
+            if (regionDemand) {
+              marketDemand = {
+                region: regionDemand.region,
+                serviceLine: regionDemand.serviceLine,
+                demandIndex: regionDemand.demand_index,
+                trend: regionDemand.trend,
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to fetch market demand, continuing without it:', error)
+        }
+      }
+
+      // Step 3: Generate outreach strategy
+      const outreachResponse = await fetch('/api/admin/mcp/market-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'vertex_clinic_outreach_brain',
+          params: {
+            clinicProfile,
+            adsActivity: adsActivityResult,
+            marketDemand,
+          },
+        }),
+      })
+
+      if (!outreachResponse.ok) {
+        throw new Error('Failed to generate outreach strategy')
+      }
+
+      const outreachData = await outreachResponse.json()
+      setOutreachStrategy(outreachData.results)
+    } catch (error) {
+      console.error('Error fetching ads activity and outreach:', error)
+      setAdsIntelError(error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      setLoadingAdsIntel(false)
+    }
+  }, [clinics, selectedClinicId])
+
+  // Get selected clinic object
+  const selectedClinic = clinics.find((c) => c.id === selectedClinicId) || null
+
   // Fetch ads activity and outreach when clinic is selected
   useEffect(() => {
     if (selectedClinicId && selectedClinic) {
@@ -98,7 +221,7 @@ export default function ClinicsControlPage() {
       setAdsActivity(null)
       setOutreachStrategy(null)
     }
-  }, [selectedClinicId, selectedClinic])
+  }, [selectedClinicId, selectedClinic, fetchAdsActivityAndOutreach])
 
   const fetchClinics = async () => {
     try {
@@ -215,128 +338,6 @@ export default function ClinicsControlPage() {
     )
   }
 
-  // Get selected clinic object
-  const selectedClinic = clinics.find((c) => c.id === selectedClinicId) || null
-
-  // Fetch ads activity and outreach strategy
-  const fetchAdsActivityAndOutreach = async () => {
-    if (!selectedClinic) return
-
-    setLoadingAdsIntel(true)
-    setAdsIntelError(null)
-
-    try {
-      // Build clinic profile
-      const clinicProfile = {
-        name: selectedClinic.name,
-        location: {
-          city: selectedClinic.city,
-          state: selectedClinic.state,
-        },
-        serviceLines: selectedClinic.service_lines || [],
-        priceBand: selectedClinic.price_band || '$$',
-        leadStatus: selectedClinic.lead_status || 'actively_accepting',
-      }
-
-      // Determine primary service line
-      const primaryServiceLine = selectedClinic.service_lines?.[0] || 'GENERAL'
-      const serviceLineMap: Record<string, string> = {
-        'TRT': 'TRT',
-        'GLP-1': 'WEIGHT_LOSS',
-        'Weight Loss': 'WEIGHT_LOSS',
-        'IV Therapy': 'IV_THERAPY',
-        'IV': 'IV_THERAPY',
-      }
-      const mappedServiceLine = serviceLineMap[primaryServiceLine] || 'GENERAL'
-
-      // Build region string
-      const region = selectedClinic.state ? `US-${selectedClinic.state}` : undefined
-
-      // Step 1: Fetch ads activity
-      const adsResponse = await fetch('/api/admin/mcp/market-intel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'ads_intel_clinic_activity',
-          params: {
-            clinicName: selectedClinic.name,
-            domain: selectedClinic.website_url,
-            region,
-            serviceLine: mappedServiceLine,
-          },
-        }),
-      })
-
-      if (!adsResponse.ok) {
-        throw new Error('Failed to fetch ads activity')
-      }
-
-      const adsData = await adsResponse.json()
-      const adsActivityResult = adsData.results
-      setAdsActivity(adsActivityResult)
-
-      // Step 2: Optionally fetch market demand
-      let marketDemand = null
-      if (region && mappedServiceLine !== 'GENERAL') {
-        try {
-          const demandResponse = await fetch('/api/admin/mcp/market-intel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tool: 'bigquery_region_demand',
-              params: {
-                serviceLine: mappedServiceLine,
-              },
-            }),
-          })
-
-          if (demandResponse.ok) {
-            const demandData = await demandResponse.json()
-            const regionDemand = demandData.results.find((r: any) => 
-              r.region === selectedClinic.state || r.region.includes(selectedClinic.state)
-            )
-            if (regionDemand) {
-              marketDemand = {
-                region: regionDemand.region,
-                serviceLine: regionDemand.serviceLine,
-                demandIndex: regionDemand.demand_index,
-                trend: regionDemand.trend,
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to fetch market demand, continuing without it:', error)
-        }
-      }
-
-      // Step 3: Generate outreach strategy
-      const outreachResponse = await fetch('/api/admin/mcp/market-intel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'vertex_clinic_outreach_brain',
-          params: {
-            clinicProfile,
-            adsActivity: adsActivityResult,
-            marketDemand,
-          },
-        }),
-      })
-
-      if (!outreachResponse.ok) {
-        throw new Error('Failed to generate outreach strategy')
-      }
-
-      const outreachData = await outreachResponse.json()
-      setOutreachStrategy(outreachData.results)
-    } catch (error) {
-      console.error('Error fetching ads activity and outreach:', error)
-      setAdsIntelError(error instanceof Error ? error.message : 'Unknown error')
-    } finally {
-      setLoadingAdsIntel(false)
-    }
-  }
-
   // Handle market intelligence scan
   const handleMarketScan = async (questionOverride?: string) => {
     let question = questionOverride || marketQuery.trim()
@@ -447,7 +448,7 @@ export default function ClinicsControlPage() {
   }
 
   return (
-    <div className="p-8 bg-dark-bg min-h-screen">
+    <div className="w-full bg-dark-bg">
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
           <div>

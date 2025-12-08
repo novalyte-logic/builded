@@ -7,20 +7,23 @@
     @apply border-dark-border;
   }
 
-  html,
-  body {
-    @apply h-full min-h-full;
+  html {
+    @apply h-full w-full;
+    overflow: hidden;
   }
 
-  #__next {
-    @apply h-full min-h-full;
-  }
-  
   body {
-    @apply bg-dark-bg text-gray-100 antialiased;
+    @apply h-full w-full bg-dark-bg text-gray-100 antialiased;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
       sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #__next {
+    @apply h-full w-full;
   }
 }
 
@@ -49,6 +52,16 @@
 
   .chart-container {
     @apply w-full h-64 min-h-[250px] flex items-center justify-center;
+  }
+
+  /* Page container for dashboard pages (inside scrollable main) */
+  .page-container {
+    @apply w-full bg-dark-bg;
+  }
+
+  /* Full screen container for standalone pages (like login) */
+  .fullscreen-container {
+    @apply min-h-screen w-full bg-dark-bg;
   }
 }
 

@@ -48,11 +48,11 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden">
+    <div className="flex h-screen w-full overflow-hidden bg-dark-bg">
       <div className="flex-shrink-0">
         <Sidebar />
       </div>
-      <main className="flex-1 overflow-y-auto px-6 py-6 min-w-0">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 min-w-0">
         {children}
       </main>
     </div>

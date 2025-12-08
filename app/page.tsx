@@ -62,7 +62,7 @@ export default function SystemOverview() {
   }, [])
 
   return (
-    <div className="w-full max-w-full bg-dark-bg min-h-screen">
+    <div className="w-full bg-dark-bg">
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-bold text-white">System Overview</h1>
