@@ -1,3 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies first for better caching
+COPY package.json package-lock.json ./
+RUN npm ci --production
+
+# Copy application code
+COPY . .
+
+ENV PORT=8080
+EXPOSE 8080
+
+CMD ["npm", "start"]
 # Novalyte™ AI - God's Eye Admin Dashboard
 # Cloud Run optimized Dockerfile
 

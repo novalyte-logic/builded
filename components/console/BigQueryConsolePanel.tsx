@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Loader2, Play, Trash2 } from 'lucide-react'
 import { useBigQueryConsole } from '@/hooks/useBigQueryConsole'
-import { BIGQUERY_PRESETS } from '@/lib/console/presets'
+import { BIGQUERY_PRESETS } from '@/lib/ai-console/presets'
 
 const SAMPLE_SQL = `-- Example: Count TRT leads by state
 SELECT state, COUNT(*) AS lead_count
@@ -39,22 +39,14 @@ export default function BigQueryConsolePanel() {
     ].filter(Boolean)
   }, [data, dataset])
 
-  const selectedPreset = selectedPresetId === 'none' ? undefined : BIGQUERY_PRESETS.find((p) => p.id === selectedPresetId)
+  const selectedPreset = selectedPresetId === 'none' ? undefined : BIGQUERY_PRESETS[selectedPresetId as keyof typeof BIGQUERY_PRESETS]
 
   const handlePresetChange = (id: string) => {
     setSelectedPresetId(id)
-    const preset = BIGQUERY_PRESETS.find((p) => p.id === id)
+    const preset = BIGQUERY_PRESETS[id as keyof typeof BIGQUERY_PRESETS]
     if (preset) {
-      const template = preset.sqlTemplate
-        .replace('{{dataset}}', dataset || 'novalyte_core')
-        .replace('{{serviceLine}}', preset.defaultParams?.serviceLine || 'TRT')
-        .replace('{{state}}', preset.defaultParams?.state || 'TX')
-        .replace('{{dateRangeDays}}', preset.defaultParams?.dateRange === '90d' ? '90' : preset.defaultParams?.dateRange === '7d' ? '7' : '30')
-        .replace('{{maxRows}}', String(preset.defaultParams?.maxRows || maxRows || 200))
-      setSql(template)
-      if (preset.defaultParams?.maxRows) {
-        setMaxRows(preset.defaultParams.maxRows)
-      }
+      setSql(preset.sql)
+      // Optionally set maxRows if needed, but keep simple
     } else {
       setSql('')
     }
@@ -71,15 +63,12 @@ export default function BigQueryConsolePanel() {
             className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-primary focus:outline-none"
           >
             <option value="none">None (blank)</option>
-            {BIGQUERY_PRESETS.map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.name}
+            {Object.entries(BIGQUERY_PRESETS).map(([key, preset]) => (
+              <option key={key} value={key}>
+                {preset.label}
               </option>
             ))}
           </select>
-          {selectedPreset && (
-            <p className="text-xs text-gray-500">{selectedPreset.description}</p>
-          )}
         </div>
       </div>
 

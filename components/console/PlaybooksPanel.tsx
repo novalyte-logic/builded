@@ -1,123 +1,128 @@
 'use client'
 
-import { useMemo } from 'react'
-import { Loader2, ArrowUpRight } from 'lucide-react'
-import { PLAYBOOKS, findPlaybook } from '@/lib/console/playbooks'
-import { usePlaybookRunner } from '@/hooks/usePlaybookRunner'
-
-function DataTable({
-  columns,
-  rows,
-}: {
-  columns: Array<{ name: string; type: string }>
-  rows: Array<Record<string, any>>
-}) {
-  if (!rows || rows.length === 0) {
-    return <div className="px-4 py-4 text-sm text-gray-500">No data returned.</div>
-  }
-  return (
-    <div className="overflow-auto">
-      <table className="min-w-full text-sm">
-        <thead className="bg-dark-hover">
-          <tr>
-            {columns.map((col) => (
-              <th
-                key={col.name}
-                className="text-left px-3 py-2 text-xs font-semibold text-gray-400 border-b border-dark-border"
-              >
-                {col.name}
-                <span className="ml-2 text-[10px] text-gray-500">{col.type}</span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, idx) => (
-            <tr key={idx} className="border-b border-dark-border hover:bg-dark-hover/60">
-              {columns.map((col) => (
-                <td key={col.name} className="px-3 py-2 text-gray-200">
-                  {row[col.name] !== undefined && row[col.name] !== null ? String(row[col.name]) : '—'}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
+import { useState } from 'react'
+import { Loader2, Play } from 'lucide-react'
 
 export default function PlaybooksPanel() {
-  const { loading, error, result, runPlaybook } = usePlaybookRunner()
+  const [selectedPlaybook, setSelectedPlaybook] = useState('')
+  const [result, setResult] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const playbookMeta = useMemo(() => {
-    if (!result) return null
-    return findPlaybook(result.playbookId)
-  }, [result])
+  const handleRun = async () => {
+    if (!selectedPlaybook) return
+    setLoading(true)
+    setError(null)
+    setResult(null)
+    try {
+      const res = await fetch('/api/admin/ai-console/playbooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: selectedPlaybook }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.message || 'Request failed')
+      }
+      const data = await res.json()
+      setResult(data)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <div className="w-full space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {PLAYBOOKS.map((playbook) => (
-          <button
-            key={playbook.id}
-            onClick={() => runPlaybook(playbook.id)}
-            disabled={loading}
-            className="bg-dark-surface border border-dark-border hover:border-primary/40 hover:bg-dark-hover transition-colors rounded-lg p-4 text-left"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-white">{playbook.name}</p>
-                <p className="text-xs text-gray-500 mt-1">{playbook.description}</p>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-gray-500" />
-            </div>
-            {loading && (
-              <div className="flex items-center gap-2 text-xs text-gray-400 mt-3">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Running...
-              </div>
-            )}
-          </button>
-        ))}
+    <div className="bg-dark-surface border border-dark-border rounded-lg p-6 space-y-4">
+      <div className="flex flex-col gap-1">
+        <label className="text-xs uppercase text-gray-500 tracking-wide">Playbook</label>
+        <select
+          value={selectedPlaybook}
+          onChange={(e) => setSelectedPlaybook(e.target.value)}
+          className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-primary focus:outline-none"
+        >
+          <option value="">None</option>
+          <option value="trt_lead_quality_tx_30d">TRT Lead Quality Snapshot (TX) – 30d</option>
+          <option value="service_line_radar_30d">Men's Health Service-Line Radar – 30d</option>
+        </select>
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={handleRun}
+          disabled={loading || !selectedPlaybook}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-black text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60"
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+          Run Playbook
+        </button>
       </div>
 
       {error && (
         <div className="border border-status-degraded/40 bg-status-degraded/10 text-status-degraded text-sm rounded-lg px-3 py-2">
-          {error}
+          Playbook error: {error}
         </div>
       )}
 
-      {result && (
-        <div className="space-y-4">
-          <div className="bg-dark-surface border border-dark-border rounded-lg">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border">
+      <div className="border border-dark-border rounded-lg">
+        <div className="px-4 py-3 border-b border-dark-border">
+          <p className="text-sm font-semibold text-white">Results</p>
+          <p className="text-xs text-gray-500">Playbook output will appear here.</p>
+        </div>
+
+        {loading && (
+          <div className="flex items-center gap-2 px-4 py-4 text-sm text-gray-300">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Running playbook...
+          </div>
+        )}
+
+        {!loading && !result && !error && (
+          <div className="px-4 py-6 text-sm text-gray-500">
+            No results yet. Select a playbook and run it to see output.
+          </div>
+        )}
+
+        {!loading && result && (
+          <div className="px-4 py-4 space-y-4">
+            <div>
+              <h4 className="text-sm font-medium text-white mb-2">{result.title}</h4>
+              <p className="text-sm text-gray-300 mb-4">{result.summary}</p>
+              <ul className="list-disc list-inside text-sm text-gray-400 space-y-1">
+                {result.insights.map((insight: string, idx: number) => (
+                  <li key={idx}>{insight}</li>
+                ))}
+              </ul>
+            </div>
+            {result.rawDataPreview && (
               <div>
-                <p className="text-sm font-semibold text-white">
-                  Result: {playbookMeta?.name || result.playbookId}
-                </p>
-                <p className="text-xs text-gray-500">
-                  Rows: {result.bigQuery.totalRows}
-                  {result.bigQuery.executionMs ? ` • Time: ${result.bigQuery.executionMs} ms` : ''}
-                </p>
+                <h5 className="text-xs font-medium text-gray-500 mb-2">Data Preview</h5>
+                <div className="max-h-32 overflow-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr>
+                        {result.rawDataPreview.columns.slice(0, 5).map((col: any) => (
+                          <th key={col.name} className="text-left px-2 py-1 text-gray-400">{col.name}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.rawDataPreview.rows.slice(0, 3).map((row: any, idx: number) => (
+                        <tr key={idx}>
+                          {result.rawDataPreview.columns.slice(0, 5).map((col: any) => (
+                            <td key={col.name} className="px-2 py-1 text-gray-200">{String(row[col.name] || '')}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-            <DataTable columns={result.bigQuery.columns} rows={result.bigQuery.rows} />
+            )}
           </div>
-
-          <div className="bg-dark-surface border border-dark-border rounded-lg">
-            <div className="px-4 py-3 border-b border-dark-border">
-              <p className="text-sm font-semibold text-white">AI Summary</p>
-              <p className="text-xs text-gray-500">
-                Generated via Vertex AI using the playbook macro.
-              </p>
-            </div>
-            <div className="px-4 py-4 text-sm text-gray-100 whitespace-pre-wrap">
-              {result.aiSummary || 'No summary returned.'}
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

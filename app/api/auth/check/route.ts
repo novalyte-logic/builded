@@ -1,20 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const cookieStore = await cookies()
-    const session = cookieStore.get('admin_session')
+    const sessionToken = cookieStore.get('admin_session')?.value
 
-    if (!session) {
+    if (!sessionToken) {
       return NextResponse.json({ authenticated: false })
     }
 
-    // In a real app, validate the session token here
-    // For now, if the cookie exists, user is authenticated
-    return NextResponse.json({ authenticated: true })
+    // In production, validate the session token properly
+    // For now, just check if it exists
+    return NextResponse.json({
+      authenticated: true,
+      role: 'SUPERADMIN',
+      userId: 'mock-user'
+    })
   } catch (error) {
     return NextResponse.json({ authenticated: false })
   }
 }
-

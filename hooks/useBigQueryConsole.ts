@@ -53,7 +53,7 @@ export function useBigQueryConsole(initialOptions?: UseBigQueryConsoleOptions): 
       setError(null)
 
       try {
-        const res = await fetch('/api/admin/mcp/bigquery/run', {
+        const res = await fetch('/api/admin/ai-console/bigquery', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

@@ -35,13 +35,32 @@ interface NavGroup {
 const navConfig: NavGroup[] = [
   {
     id: 'intelligence',
-    label: 'Intelligence',
+    label: 'Intelligence & Growth',
     items: [
+      {
+        id: 'ai-core',
+        label: 'AI Core',
+        href: '/ai-core',
+        icon: Target,
+      },
+      {
+        id: 'ai-monitoring',
+        label: 'AI Monitoring',
+        href: '/ai-monitoring',
+        icon: TrendingUp,
+      },
+      {
+        id: 'ai-console',
+        label: 'AI Console',
+        href: '/admin/ai-console',
+        icon: Code2,
+        badge: 'LIVE',
+      },
       {
         id: 'dealflow',
         label: 'Dealflow Intelligence',
         href: '/admin/dealflow',
-        icon: Target,
+        icon: Briefcase,
       },
       {
         id: 'market-intel',
