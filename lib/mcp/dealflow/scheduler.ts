@@ -257,7 +257,7 @@ export async function runTemperatureCheck(): Promise<TemperatureLog> {
           // Google Trends scan
           const trendsData = await googleTrendsRegionScan({
             region,
-            serviceLine: serviceLine === 'GLP-1' ? 'Weight Loss' : serviceLine,
+            serviceLine: (serviceLine === 'GLP-1' ? 'Weight Loss' : serviceLine) as 'TRT' | 'Weight Loss' | 'IV Therapy',
           })
           
           // BigQuery demand check

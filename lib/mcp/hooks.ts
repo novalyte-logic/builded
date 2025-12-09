@@ -1,14 +1,25 @@
 /**
- * React Hooks for MCP Tools
+ * MCP Dashboard React Hooks
  * 
- * Type-safe React hooks that wrap MCP tool calls with loading states,
- * error handling, and refetch capabilities.
+ * Custom hooks for fetching MCP data with polling support.
+ * Includes both dashboard monitoring hooks and MCP tool hooks.
  */
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { callMcpTool } from './client'
+import {
+  McpServer,
+  McpTool,
+  McpTraceEvent,
+  McpSecurityAlert,
+  McpIntegrationStatus,
+} from './types'
+
+// ============================================================================
+// Generic MCP Tool Hook (for dealflow, market-intel, workforce, etc.)
+// ============================================================================
 
 export interface UseMcpToolResult<TOutput> {
   data: TOutput | null
@@ -50,9 +61,23 @@ function useMcpTool<TInput, TOutput>(
     }
   }, [serverId, toolName, input, enabled])
 
+  // Defer initial load slightly to avoid blocking navigation
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    if (!enabled || !input) return
+    
+    // Use requestIdleCallback for non-blocking load, fallback to setTimeout
+    const timeoutId = typeof window !== 'undefined' && 'requestIdleCallback' in window
+      ? (window as any).requestIdleCallback(() => fetchData(), { timeout: 100 })
+      : setTimeout(fetchData, 0)
+    
+    return () => {
+      if (typeof timeoutId === 'number') {
+        clearTimeout(timeoutId)
+      } else if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(timeoutId)
+      }
+    }
+  }, [fetchData, enabled, input])
 
   return {
     data,
@@ -63,19 +88,18 @@ function useMcpTool<TInput, TOutput>(
 }
 
 // ============================================================================
-// Dealflow MCP Hooks
+// Dealflow Hooks
 // ============================================================================
 
 export interface GetClinicPipelineInput {
-  region?: string
+  region: string
   treatment?: string[]
-  lookback?: number // days
+  lookback?: number
   maxResults?: number
 }
 
 export interface GetClinicPipelineOutput {
   clinics: Array<{
-    id: string
     name: string
     region: string
     treatment: string[]
@@ -110,24 +134,14 @@ export interface GetRegionalDemandSpikesInput {
 
 export interface GetRegionalDemandSpikesOutput {
   spikes: Array<{
-    region: string
     treatment: string
-    spikeMagnitude: number
-    baselineValue: number
-    currentValue: number
-    trend: 'spiking' | 'sustained_high' | 'rising'
-    detectedAt: string
-    opportunityScore: number
-  }>
-  summary: {
-    totalSpikes: number
     region: string
-    lookbackWindow: {
-      days: number
-      startDate: string
-      endDate: string
-    }
-  }
+    spikeMagnitude: number
+    currentValue: number
+    baselineValue: number
+    opportunityScore: number
+    trend: 'spiking' | 'sustained_high' | 'rising'
+  }>
 }
 
 export function useDealflowDemandSpikes(
@@ -143,40 +157,23 @@ export function useDealflowDemandSpikes(
 }
 
 // ============================================================================
-// Market Intelligence MCP Hooks
+// Market Intel Hooks
 // ============================================================================
 
 export interface GetTreatmentTrendMapInput {
-  treatment?: string[]
+  treatment: string[]
   region?: string
   days?: number
   granularity?: 'daily' | 'weekly' | 'monthly'
 }
 
 export interface GetTreatmentTrendMapOutput {
-  trendMap: Array<{
+  trends: Array<{
+    date: string
     treatment: string
     region: string
-    timePoint: string
-    metrics: {
-      searchVolume: number
-      demandIndex: number
-      growthRate: number
-      trend: 'rising' | 'stable' | 'declining'
-      marketShare: number
-    }
-    signals: string[]
+    interest: number
   }>
-  summary: {
-    totalDataPoints: number
-    treatmentsAnalyzed: string[]
-    regionsAnalyzed: string[]
-    timeWindow: {
-      startDate: string
-      endDate: string
-      days: number
-    }
-  }
 }
 
 export function useMarketIntelTrends(
@@ -194,22 +191,16 @@ export function useMarketIntelTrends(
 export interface GetCompetitorDensityInput {
   region: string
   treatment?: string[]
-  radius?: number // miles
+  radius?: number
 }
 
 export interface GetCompetitorDensityOutput {
   competitors: Array<{
     name: string
     location: { city: string; state: string }
-    adSpend: 'low' | 'medium' | 'high'
-    marketShare: number
-    threatLevel: 'low' | 'medium' | 'high'
+    adSpend: 'high' | 'medium' | 'low'
+    serviceLines: string[]
   }>
-  summary: {
-    totalCompetitors: number
-    avgAdSpend: string
-    marketSaturation: number
-  }
 }
 
 export function useMarketIntelCompetitors(
@@ -225,96 +216,24 @@ export function useMarketIntelCompetitors(
 }
 
 // ============================================================================
-// Workforce MCP Hooks
+// Workforce Hooks
 // ============================================================================
 
-export interface MatchShiftsToStaffInput {
-  shiftIds: string[]
-  region?: string
-  minScore?: number
-}
-
-export interface MatchShiftsToStaffOutput {
-  matches: Array<{
-    shiftId: string
-    staffId: string
-    compatibilityScore: number
-    scoreBreakdown: {
-      roleMatch: number
-      skillsMatch: number
-      availabilityMatch: number
-      locationMatch: number
-    }
-    shift: {
-      shiftId: string
-      clinicName: string
-      startTime: string
-      endTime: string
-      treatmentType: string
-    }
-    staff: {
-      staffId: string
-      displayName: string
-      roleType: string
-      location: {
-        city: string
-        state: string
-      }
-    }
-    recommendation: 'strong_match' | 'good_match' | 'acceptable_match'
-    notes: string
-  }>
-  unmatchedShifts: Array<{
-    shiftId: string
-    clinicName: string
-    reason: string
-    suggestions: string[]
-  }>
-  summary: {
-    totalShifts: number
-    matchedShifts: number
-    unmatchedShifts: number
-    totalMatches: number
-    averageCompatibilityScore: number
-  }
-}
-
-export function useWorkforceMatches(
-  params: MatchShiftsToStaffInput | null,
-  enabled: boolean = true
-): UseMcpToolResult<MatchShiftsToStaffOutput> {
-  return useMcpTool<MatchShiftsToStaffInput, MatchShiftsToStaffOutput>(
-    'novalyte-workforce-mcp',
-    'match_shifts_to_staff',
-    params,
-    enabled
-  )
-}
-
 export interface FindAvailableStaffInput {
-  region?: string
+  region: string
   roleType?: string[]
-  serviceLine?: string[]
+  serviceLine?: string
   minExperience?: number
 }
 
 export interface FindAvailableStaffOutput {
   staff: Array<{
-    id: string
     displayName: string
     roleType: string
-    skills: string[]
-    preferredRegions: string[]
-    city: string
-    state: string
     yearsExperience: number
-    availabilityStatus: string
+    primarySkills: string[]
+    preferredShifts: string[]
   }>
-  summary: {
-    total: number
-    byRoleType: Record<string, number>
-    byRegion: Record<string, number>
-  }
 }
 
 export function useWorkforceStaffAvailability(
@@ -329,8 +248,34 @@ export function useWorkforceStaffAvailability(
   )
 }
 
+export interface MatchShiftsToStaffInput {
+  shiftIds: string[]
+  region: string
+  minScore?: number
+}
+
+export interface MatchShiftsToStaffOutput {
+  matches: Array<{
+    shiftId: string
+    staffId: string
+    fitScore: number
+  }>
+}
+
+export function useWorkforceMatches(
+  params: MatchShiftsToStaffInput | null,
+  enabled: boolean = true
+): UseMcpToolResult<MatchShiftsToStaffOutput> {
+  return useMcpTool<MatchShiftsToStaffInput, MatchShiftsToStaffOutput>(
+    'novalyte-workforce-mcp',
+    'match_shifts_to_staff',
+    params,
+    enabled
+  )
+}
+
 // ============================================================================
-// Demand Intelligence MCP Hooks
+// Demand Intel Hooks
 // ============================================================================
 
 export interface GetTreatmentTrendOverviewInput {
@@ -344,15 +289,10 @@ export interface GetTreatmentTrendOverviewOutput {
     treatment: string
     region: string
     currentDemand: number
-    trend: 'rising' | 'stable' | 'declining'
     projectedDemand: number
+    trend: 'rising' | 'stable' | 'declining'
     confidence: number
   }>
-  summary: {
-    totalRegions: number
-    avgDemandGrowth: number
-    topGrowingRegions: string[]
-  }
 }
 
 export function useDemandIntelOverview(
@@ -368,27 +308,18 @@ export function useDemandIntelOverview(
 }
 
 export interface GetIntentSignalsInput {
-  region?: string
   treatment?: string[]
+  region?: string
   days?: number
-  minSignalStrength?: number
 }
 
 export interface GetIntentSignalsOutput {
   signals: Array<{
-    type: 'search_spike' | 'social_mention' | 'news_trend' | 'competitor_activity'
     treatment: string
     region: string
-    strength: number
-    detectedAt: string
-    source: string
-    description: string
+    intentScore: number
+    signalType: string
   }>
-  summary: {
-    totalSignals: number
-    byType: Record<string, number>
-    topRegions: string[]
-  }
 }
 
 export function useIntentSignals(
@@ -403,3 +334,247 @@ export function useIntentSignals(
   )
 }
 
+// ============================================================================
+// Dashboard Monitoring Hooks (with polling)
+// ============================================================================
+
+/**
+ * Hook to check if document is visible
+ */
+function useIsVisible() {
+  if (typeof window === 'undefined') return true
+  
+  const [isVisible, setIsVisible] = useState(!document.hidden)
+  
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsVisible(!document.hidden)
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+  
+  return isVisible
+}
+
+/**
+ * Generic polling hook
+ */
+function usePolling<T>(
+  fetchFn: () => Promise<T>,
+  refreshInterval: number = 0,
+  immediate: boolean = true
+) {
+  const [data, setData] = useState<T | null>(null)
+  const [error, setError] = useState<Error | null>(null)
+  const [isLoading, setIsLoading] = useState(immediate)
+  const isVisible = useIsVisible()
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const fetchData = useCallback(async () => {
+    try {
+      setError(null)
+      const result = await fetchFn()
+      setData(result)
+      setIsLoading(false)
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'))
+      setIsLoading(false)
+    }
+  }, [fetchFn])
+
+  useEffect(() => {
+    // Initial fetch
+    if (immediate) {
+      fetchData()
+    }
+
+    // Set up polling if interval > 0 and document is visible
+    if (refreshInterval > 0 && isVisible) {
+      intervalRef.current = setInterval(fetchData, refreshInterval)
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [fetchData, refreshInterval, isVisible, immediate])
+
+  const refetch = useCallback(() => {
+    setIsLoading(true)
+    return fetchData()
+  }, [fetchData])
+
+  return { data, error, isLoading, refetch }
+}
+
+/**
+ * Fetch MCP servers with polling
+ */
+export function useMcpServers(refreshInterval: number = 30000) {
+  const { data, error, isLoading, refetch } = usePolling(
+    async () => {
+      const response = await fetch('/api/mcp/servers')
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`)
+      const json = await response.json()
+      return json.servers as McpServer[]
+    },
+    refreshInterval
+  )
+
+  return {
+    servers: data || [],
+    error,
+    isLoading,
+    refetch,
+  }
+}
+
+/**
+ * Fetch MCP tools
+ */
+export function useMcpTools(filters?: {
+  serverId?: string
+  scope?: 'read' | 'write' | 'admin'
+  status?: 'ACTIVE' | 'DISABLED'
+  search?: string
+}) {
+  const params = new URLSearchParams()
+  if (filters?.serverId) params.append('serverId', filters.serverId)
+  if (filters?.scope) params.append('scope', filters.scope)
+  if (filters?.status) params.append('status', filters.status)
+  if (filters?.search) params.append('search', filters.search)
+
+  const url = `/api/mcp/tools${params.toString() ? `?${params.toString()}` : ''}`
+
+  const { data, error, isLoading, refetch } = usePolling(
+    async () => {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`)
+      const json = await response.json()
+      return json.tools as McpTool[]
+    },
+    0 // No polling for tools
+  )
+
+  return {
+    tools: data || [],
+    error,
+    isLoading,
+    refetch,
+  }
+}
+
+/**
+ * Fetch MCP traces with polling
+ */
+export function useMcpTraces(
+  filters?: {
+    limit?: number
+    status?: 'SUCCESS' | 'ERROR'
+    serverId?: string
+    toolName?: string
+    agentName?: string
+    since?: string
+  },
+  refreshInterval: number = 15000
+) {
+  const params = new URLSearchParams()
+  if (filters?.limit) params.append('limit', filters.limit.toString())
+  if (filters?.status) params.append('status', filters.status)
+  if (filters?.serverId) params.append('serverId', filters.serverId)
+  if (filters?.toolName) params.append('toolName', filters.toolName)
+  if (filters?.agentName) params.append('agentName', filters.agentName)
+  if (filters?.since) params.append('since', filters.since)
+
+  const url = `/api/mcp/traces${params.toString() ? `?${params.toString()}` : ''}`
+
+  const { data, error, isLoading, refetch } = usePolling(
+    async () => {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`)
+      const json = await response.json()
+      return json.traces as McpTraceEvent[]
+    },
+    refreshInterval
+  )
+
+  return {
+    traces: data || [],
+    error,
+    isLoading,
+    refetch,
+  }
+}
+
+/**
+ * Fetch MCP security alerts
+ */
+export function useMcpSecurityAlerts(filters?: {
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH'
+  serverId?: string
+  toolId?: string
+  since?: string
+  limit?: number
+}) {
+  const params = new URLSearchParams()
+  if (filters?.severity) params.append('severity', filters.severity)
+  if (filters?.serverId) params.append('serverId', filters.serverId)
+  if (filters?.toolId) params.append('toolId', filters.toolId)
+  if (filters?.since) params.append('since', filters.since)
+  if (filters?.limit) params.append('limit', filters.limit.toString())
+
+  const url = `/api/mcp/security-alerts${params.toString() ? `?${params.toString()}` : ''}`
+
+  const { data, error, isLoading, refetch } = usePolling(
+    async () => {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`)
+      const json = await response.json()
+      return json.alerts as McpSecurityAlert[]
+    },
+    30000 // 30 seconds
+  )
+
+  return {
+    alerts: data || [],
+    error,
+    isLoading,
+    refetch,
+  }
+}
+
+/**
+ * Fetch MCP integrations
+ */
+export function useMcpIntegrations(filters?: {
+  provider?: string
+  status?: 'LIVE' | 'DEGRADED' | 'OFFLINE'
+}) {
+  const params = new URLSearchParams()
+  if (filters?.provider) params.append('provider', filters.provider)
+  if (filters?.status) params.append('status', filters.status)
+
+  const url = `/api/mcp/integrations${params.toString() ? `?${params.toString()}` : ''}`
+
+  const { data, error, isLoading, refetch } = usePolling(
+    async () => {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`)
+      const json = await response.json()
+      return json.integrations as McpIntegrationStatus[]
+    },
+    60000 // 1 minute
+  )
+
+  return {
+    integrations: data || [],
+    error,
+    isLoading,
+    refetch,
+  }
+}

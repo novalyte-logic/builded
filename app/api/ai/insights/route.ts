@@ -74,8 +74,9 @@ export async function POST(request: NextRequest) {
           }))
           result = await recommendChannelShifts(channelMetrics, dateRange)
         } else {
-          const dateRange = data.dateRange || getDateRange(30)
-          result = await recommendChannelShifts(data.metrics as ChannelMetrics[], dateRange)
+          const dataObj = data as any
+          const dateRange = dataObj.dateRange || getDateRange(30)
+          result = await recommendChannelShifts(dataObj.metrics as ChannelMetrics[], dateRange)
         }
         break
 

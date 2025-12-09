@@ -68,10 +68,10 @@ interface AutoVerticalProposalType {
   name: string
   marketOpportunityId: string
   components: Array<{
-    type: string
+    type: 'marketplace_category' | 'city_page' | 'service_category' | 'seo_cluster' | 'assessment_routing' | 'ad_funnel'
     name: string
     description: string
-    readyState: string
+    readyState: 'ready' | 'pending' | 'requires_setup'
   }>
   estimatedRevenue: number
   setupTime: number
@@ -86,8 +86,8 @@ interface StrategicDecision {
   marketDetails: {
     marketSize: number
     speedToProfit: number
-    competitionIntensity: string
-    regulatoryFriction: string
+    competitionIntensity: 'none' | 'low' | 'medium' | 'high'
+    regulatoryFriction: 'low' | 'medium' | 'high'
     clinicalSupply: number
     marketplaceReadiness: number
     requiredCapital: number

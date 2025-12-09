@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     )
 
     // Trigger matching engine (best effort)
-    let matches = []
+    let matches: any[] = []
     try {
       matches = await getTopMatchesForRequest(id)
     } catch (matchErr) {

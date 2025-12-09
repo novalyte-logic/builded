@@ -7,7 +7,7 @@ import StatusBadge from '@/components/StatusBadge'
 import { Users, Search, ArrowRight, Target } from 'lucide-react'
 import Explainer from '@/components/Explainer'
 import LeadDetailPanel from '@/components/leads/LeadDetailPanel'
-import { LeadDetails, LeadSummary } from '@/lib/types/leads'
+import { LeadDetails, LeadSummary } from '@/app/api/admin/leads/data'
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<LeadSummary[]>([])

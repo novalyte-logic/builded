@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { LeadDetails } from '@/lib/types/leads'
+import { LeadDetails } from '@/app/api/admin/leads/data'
 import StatusBadge from '@/components/StatusBadge'
 import { useLeadAIReasoning } from '@/hooks/useLeadAIReasoning'
 import { LeadAIReasoningModal } from '@/components/leads/LeadAIReasoningModal'

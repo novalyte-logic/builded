@@ -128,42 +128,42 @@ export default function MarketIntelligencePage() {
   } = useDemandIntelOverview(demandOverviewParams, false) // Disabled by default
 
   // Transform MCP data to UI format
-  const regions: RegionInsight[] = trendsData?.trendMap 
-    ? Array.from(new Set(trendsData.trendMap.map(t => t.region))).map(regionName => {
-        const regionTrends = trendsData.trendMap.filter(t => t.region === regionName)
-        const avgDemand = regionTrends.reduce((sum, t) => sum + t.metrics.demandIndex, 0) / regionTrends.length
-        const avgGrowth = regionTrends.reduce((sum, t) => sum + (t.metrics.growthRate || 0), 0) / regionTrends.length
+  const regions: RegionInsight[] = trendsData?.trends 
+    ? (Array.from(new Set(trendsData.trends.map(t => t.region))) as string[]).map((regionName: string) => {
+        const regionTrends = trendsData.trends.filter(t => t.region === regionName)
+        // Calculate average interest as demand proxy
+        const avgInterest = regionTrends.reduce((sum, t) => sum + (t.interest || 0), 0) / regionTrends.length
         
         return {
           regionName,
           serviceLine: (selectedTreatment[0] as any) || 'GENERAL',
-          predictedDemandScore: Math.round(avgDemand),
-          label: avgGrowth > 0.2 ? 'immediate_opportunity' : 
-                 avgGrowth > 0.1 ? 'emerging' : 
-                 avgGrowth > 0 ? 'watch_list' : 'cooling',
-          reason: `Demand index: ${avgDemand.toFixed(1)}, Growth: ${(avgGrowth * 100).toFixed(1)}%`,
-          suggestedAction: avgGrowth > 0.2 ? 'Deploy ads immediately' : 
-                          avgGrowth > 0.1 ? 'Monitor and prepare' : 
+          predictedDemandScore: Math.round(avgInterest),
+          label: avgInterest > 70 ? 'immediate_opportunity' : 
+                 avgInterest > 50 ? 'emerging' : 
+                 avgInterest > 30 ? 'watch_list' : 'cooling',
+          reason: `Interest index: ${avgInterest.toFixed(1)}`,
+          suggestedAction: avgInterest > 70 ? 'Deploy ads immediately' : 
+                          avgInterest > 50 ? 'Monitor and prepare' : 
                           'Watch for changes',
         }
       })
     : []
 
   const opportunities: OpportunityMove[] = [
-    ...(trendsData?.trendMap 
-      ? trendsData.trendMap
-          .filter(t => t.metrics.trend === 'rising' && t.metrics.growthRate > 0.15)
+    ...(trendsData?.trends 
+      ? trendsData.trends
+          .filter(t => (t.interest || 0) > 50)
           .slice(0, 10)
           .map(t => ({
-            move: `Deploy ${t.treatment} campaigns in ${t.region} – ${t.metrics.growthRate > 0.2 ? 'high' : 'medium'} growth detected`,
-            priority: (t.metrics.growthRate > 0.2 ? 'high' : t.metrics.growthRate > 0.15 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
+            move: `Deploy ${t.treatment} campaigns in ${t.region} – ${(t.interest || 0) > 70 ? 'high' : 'medium'} interest detected`,
+            priority: ((t.interest || 0) > 70 ? 'high' : (t.interest || 0) > 50 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
             region: t.region,
             serviceLine: t.treatment,
           }))
       : []),
     ...(competitorsData?.competitors
       ? competitorsData.competitors
-          .filter(c => c.threatLevel === 'low' && c.adSpend === 'low')
+          .filter(c => c.adSpend === 'low')
           .slice(0, 5)
           .map(c => ({
             move: `Low competition in ${c.location.city}, ${c.location.state} – opportunity to capture market`,
@@ -175,13 +175,12 @@ export default function MarketIntelligencePage() {
 
   const clinics: ClinicToInvestigate[] = competitorsData?.competitors
     ? competitorsData.competitors
-        .filter(c => c.marketShare < 0.1)
         .slice(0, 5)
         .map(c => ({
           name: c.name,
           region: `${c.location.city}, ${c.location.state}`,
-          serviceLine: selectedTreatment[0] || 'GENERAL',
-          reason: `Low market share (${(c.marketShare * 100).toFixed(1)}%) - potential acquisition target`,
+          serviceLine: c.serviceLines[0] || selectedTreatment[0] || 'GENERAL',
+          reason: `Ad spend: ${c.adSpend} - potential opportunity`,
         }))
     : []
 
@@ -275,7 +274,7 @@ export default function MarketIntelligencePage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && setQuery((e.target as HTMLInputElement).value)}
               placeholder="Ask the market a question..."
               className="w-full bg-dark-accent border border-dark-border rounded-lg pl-12 pr-4 py-4 text-white placeholder-gray-500 focus:outline-none focus:border-primary text-lg"
             />

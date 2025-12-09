@@ -31,6 +31,7 @@ import {
   Sliders,
   Briefcase,
   Code2,
+  Network,
   LucideIcon,
 } from 'lucide-react'
 
@@ -557,6 +558,21 @@ export const navigationConfig: NavigationSection[] = [
           'Audit user actions',
           'Monitor error patterns',
         ],
+        groupKey: 'system-settings',
+      },
+      {
+        id: 'mcp-dashboard',
+        label: 'MCP Orchestration',
+        href: '/admin/mcp-dashboard',
+        icon: Code2,
+        description: 'Mission Control for MCP servers, tools, and agent behavior',
+        howTo: 'Monitor MCP server health, view tool usage, trace agent calls, and manage security credentials. Use this as your central command center for all MCP operations.',
+        examples: [
+          'Monitor MCP server uptime and performance',
+          'View real-time agent traces and tool calls',
+          'Manage security credentials and alerts',
+        ],
+        badge: 'LIVE',
         groupKey: 'system-settings',
       },
       {

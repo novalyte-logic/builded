@@ -123,7 +123,7 @@ Novalyte Workforce Exchange`,
           ? 'Shift compatibility is partial; confirm exact shift requirements match candidate preferences.' 
           : fitMetadata?.serviceLineAlignment === 'partial' 
           ? 'Service line alignment is partial; verify candidate\'s specific experience matches clinic needs.' 
-          : clinicJob.hiringUrgencySignal === 'high' 
+          : (clinicJob as any).hiringUrgencySignal === 'high' 
           ? 'Clinic seems at high urgency, keep tone confident but not pushy.' 
           : '',
       }

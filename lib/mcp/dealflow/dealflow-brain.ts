@@ -90,7 +90,7 @@ async function pipeline1DailyLeadHarvesting(): Promise<DailyLeadHarvest> {
       // Also check Google Trends for flagged regions
       const trendsData = await googleTrendsRegionScan({
         region: topStates[0] || 'Texas',
-        serviceLine: serviceLine === 'GLP-1' ? 'Weight Loss' : serviceLine,
+        serviceLine: (serviceLine === 'GLP-1' ? 'Weight Loss' : serviceLine) as 'TRT' | 'Weight Loss' | 'IV Therapy',
       })
 
       // Add trending regions
@@ -329,13 +329,14 @@ async function pipeline2MarketTrendsIntelligence(): Promise<MarketTrendsIntellig
       const topStates = demandData
         .sort((a, b) => b.demand_index - a.demand_index)
         .slice(0, 5)
+        .map(d => d.region)
 
       for (const state of topStates) {
         try {
           // Scan Google Trends
           const trendsData = await googleTrendsRegionScan({
             region: state,
-            serviceLine: serviceLine === 'GLP-1' ? 'Weight Loss' : serviceLine,
+            serviceLine: (serviceLine === 'GLP-1' ? 'Weight Loss' : serviceLine) as 'TRT' | 'Weight Loss' | 'IV Therapy',
           })
 
           // Detect spikes

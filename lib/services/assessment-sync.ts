@@ -54,7 +54,7 @@ export async function processAssessmentCompletion(
     status: 'completed',
     flow_type: assessmentData.flow_type || assessmentData.path || 'GENERAL',
     path: assessmentData.flow_type || assessmentData.path || 'GENERAL', // Legacy alias
-    answers_json: assessmentData.answers_json || assessmentData.answers || {},
+    answers_json: assessmentData.answers_json || (assessmentData as any).answers || {},
     ai_summary_json: null,
     risk_level: null,
     predicted_ltv_band: null,
@@ -237,7 +237,7 @@ export async function syncAssessmentProgress(
     status: 'in_progress',
     flow_type: progressData.flow_type || 'GENERAL',
     path: progressData.flow_type || 'GENERAL', // Legacy alias
-    answers_json: progressData.answers_json || progressData.answers || {},
+    answers_json: progressData.answers_json || (progressData as any).answers || {},
     ai_summary_json: null,
     risk_level: null,
     predicted_ltv_band: null,

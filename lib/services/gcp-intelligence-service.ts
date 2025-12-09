@@ -54,6 +54,7 @@ export class MarketIntelligenceService {
         responseMimeType: 'application/json',
       },
       systemInstruction: {
+        role: 'system',
         parts: [
           {
             text: `You are Novalyte AI's market intelligence engine.
@@ -86,7 +87,7 @@ If no spike is detected, return spike_detected: false and empty target_cities.`
 
       const textResponse =
         response.response?.candidates?.[0]?.content?.parts
-          ?.map((part) => part.text || '')
+          ?.map((part: any) => part.text || '')
           .join('')
           .trim() || ''
 

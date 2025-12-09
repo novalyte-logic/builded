@@ -1,4 +1,58 @@
-import { LeadDetails, LeadSummary } from '@/lib/types/leads'
+// Define types locally based on usage
+export interface LeadDetails {
+  id: string
+  type: 'patient' | 'mens_clinic' | 'vendor'
+  origin: string
+  status: string
+  priority: string
+  createdAt: string
+  contact: {
+    fullName: string
+    email: string
+    phone: string
+    clinicName?: string
+  }
+  serviceLine?: string
+  region?: string
+  attribution?: {
+    channel: string
+    campaign: string
+    adGroup: string
+    geo: string
+    sourceUrl: string
+  }
+  assessment?: {
+    assessmentId: string
+    status: string
+    lastUpdated: string
+    primaryGoals: string[]
+    keyFlags: string[]
+  } | null
+  aiInsight?: {
+    summary: string
+    riskLevel: string
+    qualificationScore: number
+    recommendedNextStep: string
+  } | null
+  activity: Array<{
+    id: string
+    timestamp: string
+    type: string
+    actor: string
+    label: string
+    details?: string
+  }>
+  internalNotes?: string
+}
+
+export interface LeadSummary {
+  id: string
+  type: string
+  origin: string
+  status: string
+  priority: string
+  createdAt: string
+}
 
 const LEADS: LeadDetails[] = [
   {

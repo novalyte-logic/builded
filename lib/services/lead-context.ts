@@ -10,7 +10,8 @@
 
 import { LeadRecord, PatientAssessment } from '@/lib/types/assessment'
 import { MessageThread, ThreadWithMessages } from '@/lib/types/message'
-import { getMockAssessments, getMockLeads } from './assessment-sync'
+// Mock data functions - removed to improve performance
+// import { getMockAssessments, getMockLeads } from './assessment-sync'
 import { getMockMessageThreads } from './message-sync'
 
 export interface LeadFullContext {

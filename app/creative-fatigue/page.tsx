@@ -511,7 +511,7 @@ export default function CreativeFatiguePage() {
                 <div className="w-9 h-5 bg-dark-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
               </label>
             </div>
-            <p className="text-xs text-gray-500">Pause creatives with fatigue score > 80</p>
+            <p className="text-xs text-gray-500">Pause creatives with fatigue score &gt; 80</p>
           </div>
           <div className="bg-dark-accent border border-dark-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
@@ -521,7 +521,7 @@ export default function CreativeFatiguePage() {
                 <div className="w-9 h-5 bg-dark-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
               </label>
             </div>
-            <p className="text-xs text-gray-500">Rotate backup creative when fatigue score > 60</p>
+            <p className="text-xs text-gray-500">Rotate backup creative when fatigue score &gt; 60</p>
           </div>
           <div className="bg-dark-accent border border-dark-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
@@ -531,7 +531,7 @@ export default function CreativeFatiguePage() {
                 <div className="w-9 h-5 bg-dark-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
               </label>
             </div>
-            <p className="text-xs text-gray-500">Send alert when fatigue score > 40</p>
+            <p className="text-xs text-gray-500">Send alert when fatigue score &gt; 40</p>
           </div>
           <div className="bg-dark-accent border border-dark-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">

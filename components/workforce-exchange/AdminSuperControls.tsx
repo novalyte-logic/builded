@@ -24,7 +24,7 @@ interface AdminSuperControlsProps {
     priorityFee: number
     verificationFee: number
   }
-  onUpdateFees: (fees: typeof feeSettings) => void
+  onUpdateFees: (fees: { matchFee: number; percentageFee: number; priorityFee: number; verificationFee: number }) => void
   onApprovePractitioner: (id: string) => void
   onBanPractitioner: (id: string) => void
   onApproveClinic: (id: string) => void

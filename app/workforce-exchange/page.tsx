@@ -456,7 +456,7 @@ export default function WorkforceExchangePage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
-                        {match.candidate.preferredShifts?.join(', ') || 'N/A'}
+                        {(match.candidate as any).preferredShifts?.join(', ') || 'N/A'}
                       </td>
                       <td className="px-4 py-3">
                         <button

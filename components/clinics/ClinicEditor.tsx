@@ -611,7 +611,7 @@ export default function ClinicEditor({ clinicId, onSave, onCancel }: ClinicEdito
                   <input
                     type="text"
                     value={formData.state || ''}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value || null })}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value || undefined })}
                     className="w-full bg-dark-accent border border-dark-border rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
                       placeholder="TX"
                     />

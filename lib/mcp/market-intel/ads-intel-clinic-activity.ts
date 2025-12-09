@@ -6,7 +6,7 @@
 
 export type AdPlatform = 'Meta' | 'Google' | 'TikTok' | 'LinkedIn' | 'Snapchat' | 'Other'
 export type RegionIntensity = 'HIGH' | 'MEDIUM' | 'LOW'
-export type ServiceLine = 'TRT' | 'WEIGHT_LOSS' | 'IV_THERAPY' | 'GENERAL'
+export type AdsServiceLine = 'TRT' | 'WEIGHT_LOSS' | 'IV_THERAPY' | 'GENERAL'
 
 export interface PlatformActivity {
   platform: AdPlatform
@@ -45,7 +45,7 @@ export interface AdsIntelInput {
   clinicName: string
   domain?: string
   region?: string // e.g., "US-FL", "Miami, FL"
-  serviceLine?: ServiceLine
+  serviceLine?: AdsServiceLine
 }
 
 /**
@@ -103,7 +103,7 @@ function generateMockAdsActivity(
   clinicName: string,
   domain?: string,
   region?: string,
-  serviceLine?: ServiceLine
+  serviceLine?: AdsServiceLine
 ): AdsActivityResult {
   // Simulate detection logic: some clinics have ads, some don't
   const hasAds = Math.random() > 0.3 // 70% chance of having ads
