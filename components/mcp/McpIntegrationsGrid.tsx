@@ -4,6 +4,7 @@ import { Cloud, ExternalLink } from 'lucide-react'
 import clsx from 'clsx'
 import StatusBadge from '@/components/StatusBadge'
 import { McpIntegrationStatus } from '@/lib/mcp/types'
+import { getIntegrationUrl } from '@/lib/mcp/integration-config'
 
 export interface McpIntegrationsGridProps {
   integrations: McpIntegrationStatus[]
@@ -68,10 +69,15 @@ export default function McpIntegrationsGrid({
                 style={{ width: `${integration.quotaUsedPercent}%` }}
               />
             </div>
-            <button className="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-sm text-gray-300 hover:text-white hover:border-primary transition-colors flex items-center justify-center gap-2">
+            <a
+              href={getIntegrationUrl(integration.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-sm text-gray-300 hover:text-white hover:border-primary transition-colors flex items-center justify-center gap-2"
+            >
               <ExternalLink className="w-4 h-4" />
               View in Provider
-            </button>
+            </a>
           </div>
         ))}
       </div>

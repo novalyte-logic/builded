@@ -1,5 +1,6 @@
 'use client'
 
+import { Loader2 } from 'lucide-react'
 import StatusBadge from '@/components/StatusBadge'
 import { McpServer } from '@/lib/mcp/types'
 
@@ -7,12 +8,14 @@ export interface McpServerCardProps {
   server: McpServer
   onViewLogs?: (serverId: string) => void
   onRestart?: (serverId: string) => void
+  isRestarting?: boolean
 }
 
 export default function McpServerCard({
   server,
   onViewLogs,
   onRestart,
+  isRestarting = false,
 }: McpServerCardProps) {
   const statusMap = {
     LIVE: 'live' as const,
@@ -65,9 +68,17 @@ export default function McpServerCard({
         </button>
         <button
           onClick={() => onRestart?.(server.id)}
-          className="flex-1 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-sm text-gray-300 hover:text-white hover:border-primary transition-colors"
+          disabled={isRestarting}
+          className="flex-1 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-sm text-gray-300 hover:text-white hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          Restart
+          {isRestarting ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Restarting...
+            </>
+          ) : (
+            'Restart'
+          )}
         </button>
       </div>
     </div>

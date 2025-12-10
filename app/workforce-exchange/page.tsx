@@ -81,6 +81,34 @@ interface MatchDetail {
   }
 }
 
+interface DemandEntry {
+  jobId: string
+  jobTitle: string
+  clinicName: string
+  region: string
+  employmentType: string
+  urgency: 'low' | 'medium' | 'high'
+  serviceLine: string
+  shifts: string
+  payBand: string
+  fillProbability: number
+  context: string
+}
+
+interface SupplyEntry {
+  candidateId: string
+  displayName: string
+  roleType: string
+  yearsExperience: number
+  serviceLineMatchPct: number
+  distanceMiles: number
+  availability: string
+  reliabilityScore: number
+  fitScore: number
+  riskFlags: string[]
+  action: 'SEND_OFFER' | 'HOLD' | 'VERIFY'
+}
+
 export default function WorkforceExchangePage() {
   const searchParams = useSearchParams()
   const [region, setRegion] = useState('Texas')
@@ -90,6 +118,9 @@ export default function WorkforceExchangePage() {
   const [loading, setLoading] = useState(false)
   const [jobs, setJobs] = useState<ClinicJob[]>([])
   const [matches, setMatches] = useState<WorkforceMatch[]>([])
+  const [demand, setDemand] = useState<DemandEntry[]>([])
+  const [supply, setSupply] = useState<SupplyEntry[]>([])
+  const [insights, setInsights] = useState<string[]>([])
   const [selectedMatch, setSelectedMatch] = useState<MatchDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -106,59 +137,57 @@ export default function WorkforceExchangePage() {
     setError(null)
 
     try {
-      // Map RoleType to MCP RoleType
-      const mcpRoleType = 
-        roleType === 'RN' ? 'NURSE' :
-        roleType === 'NP' || roleType === 'PA' ? 'NP_PA' :
-        roleType === 'MA' ? 'MA_TECH' : 'OTHER'
-
-      const response = await fetch('/api/admin/mcp/workforce', {
+      const response = await fetch('/api/workforce/exchange', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'generate_workforce_matches',
-          params: {
-            region,
-            roleType: mcpRoleType,
-            serviceLineFilter: serviceLine,
-            maxClinics: 20,
-            maxCandidates: 30,
-          },
-        }),
+        body: JSON.stringify({ region, roleType, employmentType, serviceLine }),
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to generate matches')
-      }
-
+      if (!response.ok) throw new Error('Failed to generate matches')
       const data = await response.json()
-      const matchesResult = data.results
 
-      // Extract jobs from matches
-      const uniqueJobs = new Map<string, ClinicJob>()
-      matchesResult.matches.forEach((match: WorkforceMatch) => {
-        const jobKey = `${match.clinicJob.clinicName}-${match.clinicJob.jobTitle}`
-        if (!uniqueJobs.has(jobKey)) {
-          uniqueJobs.set(jobKey, {
-            jobId: `job-${uniqueJobs.size}`,
-            clinicName: match.clinicJob.clinicName,
-            clinicWebsite: null,
-            jobTitle: match.clinicJob.jobTitle,
-            roleType: mcpRoleType,
-            employmentType: match.clinicJob.employmentType,
-            location: match.clinicJob.location,
-            sourcePlatform: 'Workforce Exchange',
-            postingUrl: null,
-            summary: `Service lines: ${match.clinicJob.serviceLines.join(', ')}`,
-            postedAt: null,
-            serviceLine: match.clinicJob.serviceLines[0],
-            hiringUrgencySignal: 'medium',
-          })
-        }
-      })
+      setDemand(data.demand || [])
+      setSupply(data.supply || [])
+      setInsights(data.insights || [])
 
-      setJobs(Array.from(uniqueJobs.values()))
-      setMatches(matchesResult.matches)
+      // Map demand into clinic jobs table for existing UI
+      const jobsMapped: ClinicJob[] = (data.demand || []).map((d: DemandEntry, idx: number) => ({
+        jobId: d.jobId || `job-${idx}`,
+        clinicName: d.clinicName,
+        clinicWebsite: null,
+        jobTitle: d.jobTitle,
+        roleType: roleType,
+        employmentType: d.employmentType,
+        location: { city: d.region.split('·')[1]?.trim() || '', state: d.region.split('·')[0]?.trim() || region },
+        sourcePlatform: 'Workforce Exchange',
+        postingUrl: null,
+        summary: `${d.context} · Shifts: ${d.shifts} · Pay: ${d.payBand}`,
+        postedAt: null,
+        serviceLine: d.serviceLine,
+        hiringUrgencySignal: d.urgency,
+      }))
+      setJobs(jobsMapped)
+
+      // Map supply into matches for right panel
+      const mappedMatches: WorkforceMatch[] = (data.supply || []).map((s: SupplyEntry, idx: number) => ({
+        clinicJob: {
+          clinicName: jobsMapped[idx % jobsMapped.length]?.clinicName || jobsMapped[0]?.clinicName || 'Clinic',
+          jobTitle: jobsMapped[idx % jobsMapped.length]?.jobTitle || 'Role',
+          employmentType: employmentType,
+          serviceLines: [serviceLine],
+          location: jobsMapped[idx % jobsMapped.length]?.location || { city: '', state: region },
+        },
+        candidate: {
+          displayName: s.displayName,
+          roleType: s.roleType,
+          yearsExperience: s.yearsExperience,
+        },
+        fitScore: s.fitScore,
+        priority: s.fitScore >= 90 ? 'high' : s.fitScore >= 80 ? 'medium' : 'low',
+        notes: `Service-line match ${s.serviceLineMatchPct}%, reliability ${s.reliabilityScore}%. Action: ${s.action}`,
+        shiftCompatibility: 'good',
+        serviceLineAlignment: 'good',
+      }))
+      setMatches(mappedMatches)
     } catch (error) {
       console.error('Error generating matches:', error)
       setError(error instanceof Error ? error.message : 'Unknown error')
@@ -382,6 +411,8 @@ export default function WorkforceExchangePage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Region</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Type</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Urgency</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Shifts / Pay</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Fill Prob.</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-border">
@@ -405,6 +436,10 @@ export default function WorkforceExchangePage() {
                           {job.hiringUrgencySignal || 'Medium'}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-xs text-gray-300">{job.summary}</td>
+                      <td className="px-4 py-3 text-xs text-gray-300">
+                        {demand[idx]?.fillProbability ? `${demand[idx].fillProbability}%` : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -426,7 +461,7 @@ export default function WorkforceExchangePage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Role</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Experience</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Fit Score</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Shifts</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Reliability</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Action</th>
                   </tr>
                 </thead>
@@ -456,7 +491,7 @@ export default function WorkforceExchangePage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
-                        {(match.candidate as any).preferredShifts?.join(', ') || 'N/A'}
+                        {supply[idx]?.reliabilityScore ? `${supply[idx].reliabilityScore}%` : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <button
@@ -698,6 +733,17 @@ export default function WorkforceExchangePage() {
           <p className="text-gray-400 max-w-md mx-auto">
             Use the controls above to find clinic jobs and match them with available talent.
           </p>
+        </div>
+      )}
+
+      {insights.length > 0 && (
+        <div className="bg-dark-surface border border-dark-border rounded-lg p-6 mt-6">
+          <h3 className="text-lg font-semibold text-white mb-3">AI Workforce Read</h3>
+          <ul className="list-disc list-inside space-y-2 text-sm text-gray-200">
+            {insights.map((insight, idx) => (
+              <li key={idx}>{insight}</li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

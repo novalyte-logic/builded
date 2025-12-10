@@ -14,6 +14,8 @@ import { analyzeMarket } from '@/lib/mcp/market-intel/vertex-market-brain'
 import { fetchGoogleTrends, TrendServiceLine } from '@/lib/mcp/market-intel/google-trends-service-interest'
 import { fetchClinicAdsActivity } from '@/lib/mcp/market-intel/ads-intel-clinic-activity'
 import { generateOutreachStrategy } from '@/lib/mcp/market-intel/vertex-clinic-outreach-brain'
+import { detectMarketSpikes } from '@/lib/mcp/market-intel/market-spike-detector'
+import { locateTrtSpikes } from '@/lib/mcp/market-intel/trt-spike-locator'
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,13 +42,19 @@ export async function POST(request: NextRequest) {
       case 'vertex_clinic_outreach_brain':
         return await handleOutreachBrain(params)
       
+      case 'market-spike-detector':
+        return await handleMarketSpikeDetector(params)
+      
+      case 'trt_spike_locator':
+        return await handleTrtSpikeLocator(params)
+      
       case 'orchestrate':
         // Full orchestration: run all tools including trends
         return await handleOrchestration(question, params)
       
       default:
         return NextResponse.json(
-          { error: 'Invalid tool specified', availableTools: ['bigquery_region_demand', 'bigquery_clinic_search', 'google_trends_service_line_interest', 'ads_intel_clinic_activity', 'vertex_market_brain', 'vertex_clinic_outreach_brain', 'orchestrate'] },
+          { error: 'Invalid tool specified', availableTools: ['bigquery_region_demand', 'bigquery_clinic_search', 'google_trends_service_line_interest', 'ads_intel_clinic_activity', 'vertex_market_brain', 'vertex_clinic_outreach_brain', 'market-spike-detector', 'trt_spike_locator', 'orchestrate'] },
           { status: 400 }
         )
     }
@@ -202,6 +210,35 @@ async function handleOutreachBrain(params: any) {
 
   return NextResponse.json({
     tool: 'vertex_clinic_outreach_brain',
+    results,
+  })
+}
+
+/**
+ * Handle market-spike-detector tool call
+ */
+async function handleMarketSpikeDetector(params: any) {
+  const { maxCities, minTrendPercent } = params
+
+  const results = await detectMarketSpikes({
+    maxCities,
+    minTrendPercent,
+  })
+
+  return NextResponse.json({
+    tool: 'market-spike-detector',
+    results,
+  })
+}
+
+/**
+ * Handle trt_spike_locator tool call
+ */
+async function handleTrtSpikeLocator(params: any) {
+  const results = await locateTrtSpikes({})
+
+  return NextResponse.json({
+    tool: 'trt_spike_locator',
     results,
   })
 }

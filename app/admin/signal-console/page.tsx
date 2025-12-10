@@ -12,7 +12,7 @@ import SessionHistory, { SessionCall } from '@/components/admin/signal-console/S
 import PageTransition from '@/components/admin/animation/PageTransition'
 import AnimatedCard from '@/components/admin/animation/AnimatedCard'
 
-export default function SignalConsolePage() {
+function SignalConsoleContent() {
   const searchParams = useSearchParams()
   const [selectedServerId, setSelectedServerId] = useState<string>('')
   const [selectedToolName, setSelectedToolName] = useState<string>('')
@@ -299,14 +299,16 @@ Please help me understand:
 
 export default function SignalConsolePage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-dark-bg p-8 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading Signal Console...</p>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-dark-bg p-8 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-gray-400">Loading Signal Console...</p>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <SignalConsoleContent />
     </Suspense>
   )

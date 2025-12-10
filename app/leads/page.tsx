@@ -7,22 +7,26 @@ import StatusBadge from '@/components/StatusBadge'
 import { Users, Search, ArrowRight, Target } from 'lucide-react'
 import Explainer from '@/components/Explainer'
 import LeadDetailPanel from '@/components/leads/LeadDetailPanel'
-import { LeadDetails, LeadSummary } from '@/app/api/admin/leads/data'
+import { LeadRecord, LeadStatus, LeadType, LeadPriority, LeadOrigin } from '@/lib/types/leads'
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<LeadSummary[]>([])
+  const [leads, setLeads] = useState<LeadRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({
-    status: '',
-    origin: '',
-    priority: '',
-    lead_type: '',
+  const [filters, setFilters] = useState<{
+    status: 'ALL' | LeadStatus
+    origin: 'ALL' | LeadOrigin
+    priority: 'ALL' | LeadPriority
+    lead_type: 'ALL' | LeadType
+    search: string
+  }>({
+    status: 'ALL',
+    origin: 'ALL',
+    priority: 'ALL',
+    lead_type: 'ALL',
     search: '',
   })
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
-  const [selectedLead, setSelectedLead] = useState<LeadDetails | null>(null)
-  const [loadingLeadDetails, setLoadingLeadDetails] = useState(false)
-  const [leadError, setLeadError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchLeads()
@@ -31,47 +35,28 @@ export default function LeadsPage() {
   const fetchLeads = async () => {
     try {
       setLoading(true)
+      setError(null)
       const params = new URLSearchParams()
-      if (filters.status) params.set('status', filters.status)
-      if (filters.origin) params.set('origin', filters.origin)
-      if (filters.priority) params.set('priority', filters.priority)
-      if (filters.lead_type) params.set('type', filters.lead_type)
+      if (filters.status !== 'ALL') params.set('status', filters.status)
+      if (filters.origin !== 'ALL') params.set('origin', filters.origin)
+      if (filters.priority !== 'ALL') params.set('priority', filters.priority)
+      if (filters.lead_type !== 'ALL') params.set('type', filters.lead_type)
       if (filters.search) params.set('q', filters.search)
 
-      const response = await fetch(`/api/admin/leads?${params.toString()}`)
+      const response = await fetch(`/api/leads?${params.toString()}`)
       if (!response.ok) throw new Error('Failed to fetch leads')
 
       const data = await response.json()
-      const items: LeadSummary[] = data.items || []
+      const items: LeadRecord[] = data.leads || []
       setLeads(items)
       if (!selectedLeadId && items.length > 0) {
-        selectLead(items[0].id)
+        setSelectedLeadId(items[0].id)
       }
     } catch (error) {
       console.error('Error fetching leads:', error)
+      setError('Unable to load leads right now.')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const selectLead = (leadId: string) => {
-    setSelectedLeadId(leadId)
-    fetchLeadDetails(leadId)
-  }
-
-  const fetchLeadDetails = async (id: string) => {
-    try {
-      setLoadingLeadDetails(true)
-      setLeadError(null)
-      const res = await fetch(`/api/admin/leads/${id}`)
-      if (!res.ok) throw new Error('Failed to fetch lead details')
-      const data = await res.json()
-      setSelectedLead(data.lead as LeadDetails)
-    } catch (err) {
-      setLeadError((err as Error).message || 'Failed to load lead')
-      setSelectedLead(null)
-    } finally {
-      setLoadingLeadDetails(false)
     }
   }
 
@@ -106,6 +91,8 @@ export default function LeadsPage() {
     []
   )
 
+  const selectedLead = leads.find((l) => l.id === selectedLeadId) || null
+
   return (
     <div className="p-8 bg-dark-bg min-h-screen">
       <div className="mb-8">
@@ -128,7 +115,7 @@ export default function LeadsPage() {
             </p>
           </div>
           <Link
-            href="/admin/dealflow"
+            href={selectedLeadId ? `/admin/dealflow?leadId=${selectedLeadId}` : '/admin/dealflow'}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm"
           >
             Go to Dealflow Console
@@ -166,7 +153,7 @@ export default function LeadsPage() {
           >
             <select
               value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
               className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
             >
               <option value="">All Status</option>
@@ -186,7 +173,7 @@ export default function LeadsPage() {
           >
             <select
               value={filters.lead_type}
-              onChange={(e) => setFilters({ ...filters, lead_type: e.target.value })}
+              onChange={(e) => setFilters({ ...filters, lead_type: e.target.value as any })}
               className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
             >
               <option value="">All Types</option>
@@ -204,7 +191,7 @@ export default function LeadsPage() {
           >
             <select
               value={filters.priority}
-              onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
+              onChange={(e) => setFilters({ ...filters, priority: e.target.value as any })}
               className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
             >
               <option value="">All Priorities</option>
@@ -222,7 +209,7 @@ export default function LeadsPage() {
           >
             <select
               value={filters.origin}
-              onChange={(e) => setFilters({ ...filters, origin: e.target.value })}
+              onChange={(e) => setFilters({ ...filters, origin: e.target.value as any })}
               className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
             >
               <option value="">All Origins</option>
@@ -241,6 +228,11 @@ export default function LeadsPage() {
           <div className="p-6 border-b border-dark-border">
             <h2 className="text-lg font-semibold text-white">All Leads</h2>
           </div>
+          {error && (
+            <div className="px-6 py-3 text-sm text-status-offline bg-status-offline/10 border-b border-status-offline/30">
+              {error}
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-dark-accent border-b border-dark-border">
@@ -270,11 +262,13 @@ export default function LeadsPage() {
               </thead>
               <tbody className="divide-y divide-dark-border">
                 {loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
-                      Loading leads...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }).map((_, idx) => (
+                    <tr key={idx}>
+                      <td colSpan={7} className="px-6 py-4">
+                        <div className="h-4 bg-dark-border/60 rounded animate-pulse" />
+                      </td>
+                    </tr>
+                  ))
                 ) : leads.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
@@ -291,7 +285,7 @@ export default function LeadsPage() {
                           'hover:bg-dark-hover transition-colors cursor-pointer',
                           isActive && 'bg-primary/10 border-l-2 border-primary'
                         )}
-                        onClick={() => selectLead(lead.id)}
+                        onClick={() => setSelectedLeadId(lead.id)}
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-mono text-gray-300">{lead.id}</span>
@@ -319,7 +313,7 @@ export default function LeadsPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              selectLead(lead.id)
+                              setSelectedLeadId(lead.id)
                             }}
                             className="text-primary hover:text-primary-light transition-colors text-sm"
                           >
@@ -335,7 +329,7 @@ export default function LeadsPage() {
           </div>
         </div>
 
-        <LeadDetailPanel lead={selectedLead} loading={loadingLeadDetails} error={leadError} />
+        <LeadDetailPanel lead={selectedLead} loading={loading} error={error} />
       </div>
     </div>
   )

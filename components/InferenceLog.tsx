@@ -1,26 +1,29 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
 interface InferenceEntry {
   id: string
-  timestamp: Date
+  timestamp: string
   model: string
   input: string
   output: string
   confidence: number
   latency: number
   safetyFlags: string[]
+  onViewDetails?: (id: string) => void
 }
 
 interface InferenceLogProps {
   entries: InferenceEntry[]
   maxVisible?: number
+  onLoadMore?: () => void
+  remainingCount?: number
 }
 
-export default function InferenceLog({ entries, maxVisible = 10 }: InferenceLogProps) {
+export default function InferenceLog({ entries, maxVisible = 10, onLoadMore, remainingCount }: InferenceLogProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [visibleCount, setVisibleCount] = useState(maxVisible)
 
@@ -48,7 +51,7 @@ export default function InferenceLog({ entries, maxVisible = 10 }: InferenceLogP
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-xs text-gray-500">
-                    {formatDistanceToNow(entry.timestamp, { addSuffix: true })}
+                    {formatDistanceToNow(new Date(entry.timestamp), { addSuffix: true })}
                   </span>
                   <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full">
                     {entry.model}
@@ -86,14 +89,20 @@ export default function InferenceLog({ entries, maxVisible = 10 }: InferenceLogP
                 )}
                 {expanded.has(entry.id) && (
                   <div className="mt-3 pt-3 border-t border-dark-border">
-                    <div className="text-xs text-gray-400 space-y-1">
+                  <div className="text-xs text-gray-400 space-y-1">
                       <div>
                         <span className="text-gray-500">ID:</span> {entry.id}
                       </div>
                       <div>
                         <span className="text-gray-500">Timestamp:</span>{' '}
-                        {entry.timestamp.toISOString()}
+                        {new Date(entry.timestamp).toISOString()}
                       </div>
+                    <button
+                      onClick={() => entry.onViewDetails?.(entry.id)}
+                      className="text-primary hover:text-primary-light transition-colors text-xs"
+                    >
+                      View Details
+                    </button>
                     </div>
                   </div>
                 )}
@@ -112,17 +121,24 @@ export default function InferenceLog({ entries, maxVisible = 10 }: InferenceLogP
           </div>
         ))}
       </div>
-      {entries.length > visibleCount && (
+      {((entries.length > visibleCount) || (remainingCount && remainingCount > 0)) && (
         <div className="p-4 border-t border-dark-border">
           <button
-            onClick={() => setVisibleCount((prev) => prev + maxVisible)}
+            onClick={() => {
+              if (onLoadMore) {
+                onLoadMore()
+              } else {
+                setVisibleCount((prev) => prev + maxVisible)
+              }
+            }}
             className="text-sm text-primary hover:text-primary-light transition-colors"
           >
-            Load More ({entries.length - visibleCount} remaining)
+            {onLoadMore
+              ? `Load More (${remainingCount ?? Math.max(entries.length - visibleCount, 0)} remaining)`
+              : `Load More (${entries.length - visibleCount} remaining)`}
           </button>
         </div>
       )}
     </div>
   )
 }
-

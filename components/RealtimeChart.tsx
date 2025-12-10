@@ -21,6 +21,7 @@ interface RealtimeChartProps {
   height?: number
   refreshInterval?: number
   initialValue?: number
+  staticData?: { timestamp: string; value: number }[]
   filters?: {
     serviceLine: string
     dateRange: string
@@ -35,11 +36,25 @@ export default function RealtimeChart({
   height = 200,
   refreshInterval = 3000,
   initialValue = 1000,
+  staticData,
   filters,
 }: RealtimeChartProps) {
-  const [data, setData] = useState(generateTimeSeriesData(20, initialValue))
+  const [data, setData] = useState(
+    staticData
+      ? staticData.map((d) => ({ time: d.timestamp, value: d.value }))
+      : generateTimeSeriesData(20, initialValue)
+  )
+
+  // Update when static data changes
+  useEffect(() => {
+    if (staticData) {
+      setData(staticData.map((d) => ({ time: d.timestamp, value: d.value })))
+    }
+  }, [staticData])
 
   useEffect(() => {
+    if (staticData) return
+
     const interval = setInterval(() => {
       setData((prev) => {
         const newData = [...prev.slice(1)]
@@ -52,7 +67,7 @@ export default function RealtimeChart({
     }, refreshInterval)
 
     return () => clearInterval(interval)
-  }, [refreshInterval, initialValue, filters?.serviceLine, filters?.dateRange, filters?.region])
+  }, [refreshInterval, initialValue, filters?.serviceLine, filters?.dateRange, filters?.region, staticData])
 
   const ChartComponent = type === 'area' ? AreaChart : LineChart
 

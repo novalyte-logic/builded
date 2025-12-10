@@ -26,6 +26,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env
 
 # vercel
 .vercel
@@ -34,3 +35,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Google Cloud SDK (should be installed separately)
+/google-cloud-sdk/
+
+# Docker files (should not be committed)
+/DockerDesktop/
+*.raw
+
+# IDE
+.vscode/
+.cursor/

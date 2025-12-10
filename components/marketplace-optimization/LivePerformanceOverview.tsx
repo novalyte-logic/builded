@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Search, Filter, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Search, TrendingUp, TrendingDown, Minus, RefreshCw, Clock } from 'lucide-react'
 import { ProductMetrics } from '@/lib/types/marketplace-optimization'
 import { getRevenuePotentialBadge } from '@/lib/services/marketplace-optimization-engine'
 import Explainer from '../Explainer'
@@ -15,17 +15,17 @@ interface ProductPerformance extends ProductMetrics {
 export default function LivePerformanceOverview() {
   const [products, setProducts] = useState<ProductPerformance[]>([])
   const [loading, setLoading] = useState(true)
+  const [lastScan, setLastScan] = useState<string | null>(null)
   const [filters, setFilters] = useState({
     category: '',
     performance: '',
     for_who: '',
     search: '',
   })
+  const adminToken = process.env.NEXT_PUBLIC_ADMIN_TOKEN
 
   useEffect(() => {
     fetchPerformanceData()
-    const interval = setInterval(fetchPerformanceData, 60000) // Refresh every minute
-    return () => clearInterval(interval)
   }, [filters])
 
   const fetchPerformanceData = async () => {
@@ -36,18 +36,35 @@ export default function LivePerformanceOverview() {
       if (filters.performance) params.set('performance', filters.performance)
       if (filters.for_who) params.set('for_who', filters.for_who)
 
-      const response = await fetch(`/api/admin/marketplace-optimization/performance?${params.toString()}`)
+      const response = await fetch(`/api/admin/marketplace/ai/performance?${params.toString()}`, {
+        headers: adminToken ? { 'x-novalyte-admin': adminToken } : undefined,
+      })
       if (!response.ok) throw new Error('Failed to fetch performance data')
 
       const data = await response.json()
       // Filter by search locally
-      let filtered = data.products || []
+      let filtered = (data.products || []).map((p: any) => ({
+        ...p,
+        product_id: p.productId || p.product_id,
+        product_name: p.productName || p.product_name,
+        attach_rate_to_assessment: p.attach_rate_to_assessment || p.addToCart || 0.2,
+        attach_rate_to_clinic_match: p.attach_rate_to_clinic_match || 0.1,
+        revenue_proxy_score: Math.round((p.ctr || 0) * 100),
+      }))
+      if (data.lastScan) setLastScan(data.lastScan)
       if (filters.search) {
         const searchLower = filters.search.toLowerCase()
         filtered = filtered.filter((p: ProductPerformance) =>
           p.product_name.toLowerCase().includes(searchLower) ||
           p.category.toLowerCase().includes(searchLower)
         )
+      }
+      if (filters.performance) {
+        filtered = filtered.filter((p: ProductPerformance) => {
+          if (filters.performance === 'top') return p.ctr >= 0.3
+          if (filters.performance === 'middle') return p.ctr >= 0.15 && p.ctr < 0.3
+          return p.ctr < 0.15
+        })
       }
       setProducts(filtered)
     } catch (error) {
@@ -56,6 +73,8 @@ export default function LivePerformanceOverview() {
       setLoading(false)
     }
   }
+
+  const skeletonRows = useMemo(() => Array.from({ length: 6 }), [])
 
   const getRevenueBadgeColor = (badge: 'Low' | 'Medium' | 'High') => {
     switch (badge) {
@@ -71,7 +90,21 @@ export default function LivePerformanceOverview() {
   return (
     <div className="bg-dark-surface border border-dark-border rounded-lg">
       {/* Filters */}
-      <div className="p-6 border-b border-dark-border">
+      <div className="p-6 border-b border-dark-border space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-xs text-gray-400">
+            <Clock className="w-4 h-4" />
+            <span>Last AI Scan: {lastScan ? new Date(lastScan).toLocaleString() : '—'}</span>
+          </div>
+          <button
+            onClick={fetchPerformanceData}
+            className="flex items-center gap-2 px-3 py-2 bg-dark-accent border border-dark-border rounded-lg text-sm text-gray-200 hover:text-white"
+            disabled={loading}
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Resync Metrics
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Explainer
             title="Search Products"
@@ -180,11 +213,31 @@ export default function LivePerformanceOverview() {
           </thead>
           <tbody className="divide-y divide-dark-border">
             {loading ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
-                  Loading performance data...
-                </td>
-              </tr>
+              skeletonRows.map((_, idx) => (
+                <tr key={idx}>
+                  <td className="px-6 py-4">
+                    <div className="h-4 w-32 bg-dark-border rounded animate-pulse" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 w-24 bg-dark-border rounded animate-pulse" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 w-12 bg-dark-border rounded animate-pulse" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 w-16 bg-dark-border rounded animate-pulse" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 w-16 bg-dark-border rounded animate-pulse" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 w-20 bg-dark-border rounded animate-pulse" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-6 w-16 bg-dark-border rounded-full animate-pulse" />
+                  </td>
+                </tr>
+              ))
             ) : products.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-6 py-8 text-center text-gray-400">

@@ -3,11 +3,13 @@
 import { useState } from 'react'
 import { Code2, Search } from 'lucide-react'
 import clsx from 'clsx'
-import { McpTool } from '@/lib/mcp/types'
-import McpToolTestDrawer from './McpToolTestDrawer'
+import { McpTool as McpToolType } from '@/lib/mcp/types'
+import { McpTool, getPromptTemplatesByTool } from '@/lib/mcpRegistry'
+import ToolRunnerDrawer from './ToolRunnerDrawer'
+import PromptTemplatesModal from './PromptTemplatesModal'
 
 export interface McpToolsRegistryProps {
-  tools: McpTool[]
+  tools: McpToolType[]
   servers: { id: string; name: string }[]
 }
 
@@ -15,8 +17,10 @@ export default function McpToolsRegistry({ tools, servers }: McpToolsRegistryPro
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedServer, setSelectedServer] = useState<string>('')
   const [selectedScope, setSelectedScope] = useState<string>('')
-  const [selectedTool, setSelectedTool] = useState<McpTool | null>(null)
+  const [selectedTool, setSelectedTool] = useState<McpToolType | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [promptToolName, setPromptToolName] = useState<string | null>(null)
+  const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
 
   const filteredTools = tools.filter((tool) => {
     const matchesSearch =
@@ -27,9 +31,25 @@ export default function McpToolsRegistry({ tools, servers }: McpToolsRegistryPro
     return matchesSearch && matchesServer && matchesScope
   })
 
-  const handleTryTool = (tool: McpTool) => {
+  const handleTryTool = (tool: McpToolType) => {
     setSelectedTool(tool)
     setIsDrawerOpen(true)
+  }
+
+  const handleViewPrompts = (toolName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setPromptToolName(toolName)
+    setIsPromptModalOpen(true)
+  }
+
+  const getServerName = (serverId: string) => {
+    const server = servers.find((s) => s.id === serverId)
+    return server?.name || serverId
+  }
+
+  // Get registry tool data for prompt templates
+  const getRegistryTool = (toolName: string): McpTool | undefined => {
+    return tools.find((t) => t.name === toolName) as McpTool | undefined
   }
 
   return (
@@ -141,15 +161,26 @@ export default function McpToolsRegistry({ tools, servers }: McpToolsRegistryPro
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleTryTool(tool)
-                      }}
-                      className="px-3 py-1 bg-primary/10 text-primary border border-primary/30 rounded text-xs hover:bg-primary/20 transition-colors"
-                    >
-                      Try Tool
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleViewPrompts(tool.name, e)
+                        }}
+                        className="px-3 py-1 bg-dark-accent border border-dark-border rounded text-xs text-gray-300 hover:text-white hover:border-primary transition-colors"
+                      >
+                        View Prompts
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleTryTool(tool)
+                        }}
+                        className="px-3 py-1 bg-primary/10 text-primary border border-primary/30 rounded text-xs hover:bg-primary/20 transition-colors"
+                      >
+                        Try Tool
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -157,14 +188,26 @@ export default function McpToolsRegistry({ tools, servers }: McpToolsRegistryPro
           </table>
         </div>
       </div>
-      <McpToolTestDrawer
+      <ToolRunnerDrawer
         tool={selectedTool}
+        serverName={selectedTool ? getServerName(selectedTool.serverId) : ''}
         isOpen={isDrawerOpen}
         onClose={() => {
           setIsDrawerOpen(false)
           setSelectedTool(null)
         }}
       />
+      {promptToolName && (
+        <PromptTemplatesModal
+          toolName={promptToolName}
+          templates={getPromptTemplatesByTool(promptToolName)}
+          isOpen={isPromptModalOpen}
+          onClose={() => {
+            setIsPromptModalOpen(false)
+            setPromptToolName(null)
+          }}
+        />
+      )}
     </>
   )
 }

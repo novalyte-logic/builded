@@ -5,28 +5,27 @@
  */
 
 export type OptimizationSuggestionType =
-  | 'REORDER'
-  | 'FEATURE_PRODUCT'
-  | 'DOWNRANK_PRODUCT'
-  | 'CREATE_STACK'
-  | 'CATEGORY_PRIORITY_CHANGE'
+  | 'attach_to_assessment'
+  | 'attach_to_clinic'
+  | 'boost_visibility'
+  | 'demote'
+  | 'create_bundle'
 
-export type TargetEntityType = 'PRODUCT' | 'CATEGORY' | 'STACK'
-
-export type SuggestionStatus = 'PENDING' | 'APPLIED' | 'DISMISSED'
+export type SuggestionStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 export interface MarketplaceOptimizationSuggestion {
   id: string
-  type: OptimizationSuggestionType
-  target_entity_type: TargetEntityType
-  target_id: string // Product ID, Category name, or Stack ID
-  rationale_text: string // Plain English explanation
-  impact_estimate_score: number // 0-100
-  created_at: Date
+  productId: string
+  productName: string
+  category: string
+  suggestionType: OptimizationSuggestionType
+  reasoning: string
+  expectedRevenueImpact: number
+  attachTargets?: string[]
+  bundleComponents?: string[]
   status: SuggestionStatus
-  applied_by: string | null // Superadmin ID who applied it
-  applied_at: Date | null
-  metadata?: Record<string, any> // Additional context (e.g., new position, stack products, etc.)
+  createdAt: string
+  metadata?: Record<string, any>
 }
 
 export interface ProductMetrics {

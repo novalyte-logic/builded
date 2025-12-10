@@ -22,11 +22,17 @@ interface ClinicPerformance {
 interface ClinicPerformanceTableProps {
   clinics: ClinicPerformance[]
   onRowClick: (clinicId: string) => void
+  selectedId?: string | null
+  isLoading?: boolean
+  error?: string | null
 }
 
 export default function ClinicPerformanceTable({
   clinics,
   onRowClick,
+  selectedId,
+  isLoading = false,
+  error,
 }: ClinicPerformanceTableProps) {
   const [search, setSearch] = useState('')
   const [region, setRegion] = useState('')
@@ -143,6 +149,11 @@ export default function ClinicPerformanceTable({
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
+        {error && (
+          <div className="px-4 py-3 text-sm text-status-offline bg-status-offline/10 border border-status-offline/30">
+            {error}
+          </div>
+        )}
         <table className="w-full">
           <thead className="bg-dark-accent border-b border-dark-border sticky top-0 z-10">
             <tr>
@@ -173,7 +184,15 @@ export default function ClinicPerformanceTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-dark-border">
-            {sortedClinics.length === 0 ? (
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, idx) => (
+                <tr key={idx}>
+                  <td colSpan={8} className="px-4 py-4">
+                    <div className="h-4 bg-dark-border/60 rounded animate-pulse" />
+                  </td>
+                </tr>
+              ))
+            ) : sortedClinics.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   No clinics found matching your filters
@@ -184,7 +203,9 @@ export default function ClinicPerformanceTable({
               <tr
                 key={clinic.id}
                 onClick={() => onRowClick(clinic.id)}
-                className="hover:bg-dark-hover cursor-pointer transition-colors group"
+                className={`hover:bg-dark-hover cursor-pointer transition-colors group ${
+                  selectedId === clinic.id ? 'bg-primary/10' : ''
+                }`}
               >
                 <td className="px-4 py-3">
                   <div className="text-sm font-medium text-white">{clinic.name}</div>

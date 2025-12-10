@@ -74,3 +74,16 @@ export interface CategoryMetrics {
   display_priority: number
 }
 
+export type AdminCategory = {
+  id: string
+  name: string
+  slug: string
+  productCount: number
+  views: number
+  ctr: number
+  addToStack: number
+  priority: number
+  isVisible: boolean
+  updatedAt: string
+}
+

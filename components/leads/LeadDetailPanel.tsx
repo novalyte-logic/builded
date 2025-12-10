@@ -1,33 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { LeadDetails } from '@/app/api/admin/leads/data'
 import StatusBadge from '@/components/StatusBadge'
-import { useLeadAIReasoning } from '@/hooks/useLeadAIReasoning'
-import { LeadAIReasoningModal } from '@/components/leads/LeadAIReasoningModal'
 import { BrainCircuit } from 'lucide-react'
+import { LeadRecord } from '@/lib/types/leads'
 
 interface LeadDetailPanelProps {
-  lead: LeadDetails | null
+  lead: LeadRecord | null
   loading: boolean
   error: string | null
 }
 
 export default function LeadDetailPanel({ lead, loading, error }: LeadDetailPanelProps) {
   const [isReasoningModalOpen, setIsReasoningModalOpen] = useState(false)
-  const {
-    loading: reasoningLoading,
-    reasoning,
-    error: reasoningError,
-    fetchReasoning,
-  } = useLeadAIReasoning()
-
-  const handleOpenReasoningModal = () => {
-    if (lead) {
-      fetchReasoning(lead.id)
-      setIsReasoningModalOpen(true)
-    }
-  }
 
   if (loading) {
     return (
@@ -97,19 +82,19 @@ export default function LeadDetailPanel({ lead, loading, error }: LeadDetailPane
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-200">
             <div>
               <p className="text-gray-500 text-xs">Name</p>
-              <p>{lead.contact.fullName || '—'}</p>
+              <p>{lead.name || lead.clinicOrVendorName || '—'}</p>
             </div>
             <div>
               <p className="text-gray-500 text-xs">Email</p>
-              <p>{lead.contact.email || '—'}</p>
+              <p>{lead.email || '—'}</p>
             </div>
             <div>
               <p className="text-gray-500 text-xs">Phone</p>
-              <p>{lead.contact.phone || '—'}</p>
+              <p>{lead.phone || '—'}</p>
             </div>
             <div>
               <p className="text-gray-500 text-xs">Clinic / Vendor</p>
-              <p>{lead.contact.clinicName || '—'}</p>
+              <p>{lead.clinicOrVendorName || '—'}</p>
             </div>
             <div>
               <p className="text-gray-500 text-xs">Service Line</p>
@@ -128,23 +113,23 @@ export default function LeadDetailPanel({ lead, loading, error }: LeadDetailPane
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-200">
             <div>
               <p className="text-gray-500 text-xs">Channel</p>
-              <p>{lead.attribution?.channel || '—'}</p>
+              <p>{lead.channel || '—'}</p>
             </div>
             <div>
               <p className="text-gray-500 text-xs">Campaign</p>
-              <p>{lead.attribution?.campaign || '—'}</p>
+              <p>{lead.campaign || '—'}</p>
             </div>
             <div>
               <p className="text-gray-500 text-xs">Ad Group</p>
-              <p>{lead.attribution?.adGroup || '—'}</p>
+              <p>{lead.adGroup || '—'}</p>
             </div>
             <div>
               <p className="text-gray-500 text-xs">Geo</p>
-              <p>{lead.attribution?.geo || '—'}</p>
+              <p>{lead.geo || '—'}</p>
             </div>
             <div className="md:col-span-2">
               <p className="text-gray-500 text-xs">Source URL</p>
-              <p className="break-all">{lead.attribution?.sourceUrl || '—'}</p>
+              <p className="break-all">{lead.sourceUrl || '—'}</p>
             </div>
           </div>
         </div>
@@ -152,25 +137,25 @@ export default function LeadDetailPanel({ lead, loading, error }: LeadDetailPane
         {/* Assessment */}
         <div className="border border-dark-border rounded-lg p-3">
           <p className="text-xs text-gray-500 uppercase mb-2">Assessment</p>
-          {lead.assessment ? (
+          {lead.assessmentId ? (
             <div className="space-y-1 text-sm text-gray-200">
               <p>
-                <span className="text-gray-500">ID:</span> {lead.assessment.assessmentId}
+                <span className="text-gray-500">ID:</span> {lead.assessmentId}
               </p>
               <p>
-                <span className="text-gray-500">Status:</span> {lead.assessment.status}
+                <span className="text-gray-500">Status:</span> {lead.assessmentStatus || '—'}
               </p>
               <p>
                 <span className="text-gray-500">Last Updated:</span>{' '}
-                {new Date(lead.assessment.lastUpdated).toLocaleString()}
+                {lead.assessmentUpdatedAt ? new Date(lead.assessmentUpdatedAt).toLocaleString() : '—'}
               </p>
               <p>
                 <span className="text-gray-500">Primary Goals:</span>{' '}
-                {lead.assessment.primaryGoals?.join(', ') || '—'}
+                {lead.primaryGoals?.join(', ') || '—'}
               </p>
               <p>
                 <span className="text-gray-500">Key Flags:</span>{' '}
-                {lead.assessment.keyFlags?.join(', ') || '—'}
+                {lead.keyFlags?.join(', ') || '—'}
               </p>
             </div>
           ) : (
@@ -183,21 +168,21 @@ export default function LeadDetailPanel({ lead, loading, error }: LeadDetailPane
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500 uppercase">AI Insight</p>
             <div className="flex items-center gap-2">
-              {lead.aiInsight?.riskLevel && (
+              {lead.aiRiskLevel && (
                 <span
                   className={`text-xs px-2 py-1 rounded-full border ${
-                    lead.aiInsight.riskLevel === 'high'
+                    lead.aiRiskLevel === 'high'
                       ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                      : lead.aiInsight.riskLevel === 'medium'
+                      : lead.aiRiskLevel === 'medium'
                       ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
                       : 'bg-status-live/20 text-status-live border-status-live/30'
                   }`}
                 >
-                  {lead.aiInsight.riskLevel} risk
+                  {lead.aiRiskLevel} risk
                 </span>
               )}
               <button
-                onClick={handleOpenReasoningModal}
+                onClick={() => setIsReasoningModalOpen(true)}
                 className="px-2 py-1 text-xs text-blue-400 bg-blue-900/50 rounded-md hover:bg-blue-900"
               >
                 <BrainCircuit size={16} className="inline mr-1" />
@@ -205,15 +190,10 @@ export default function LeadDetailPanel({ lead, loading, error }: LeadDetailPane
               </button>
             </div>
           </div>
-          <p className="text-sm text-gray-200 whitespace-pre-wrap">{lead.aiInsight?.summary || '—'}</p>
-          {lead.aiInsight?.qualificationScore !== undefined && (
+          <p className="text-sm text-gray-200 whitespace-pre-wrap">{lead.aiInsightSummary || '—'}</p>
+          {lead.aiQualificationScore !== undefined && (
             <p className="text-xs text-gray-400">
-              Qualified: {lead.aiInsight.qualificationScore} / 100
-            </p>
-          )}
-          {lead.aiInsight?.recommendedNextStep && (
-            <p className="text-xs text-gray-400">
-              Next step: {lead.aiInsight.recommendedNextStep}
+              Qualified: {lead.aiQualificationScore} / 100
             </p>
           )}
         </div>
@@ -228,10 +208,9 @@ export default function LeadDetailPanel({ lead, loading, error }: LeadDetailPane
                   <span className="text-gray-400 text-xs">
                     {new Date(evt.timestamp).toLocaleString()}
                   </span>
-                  <span className="text-[10px] uppercase text-gray-500">{evt.type.replace('_', ' ')}</span>
+                  <span className="text-[10px] uppercase text-gray-500">{evt.kind.replace('_', ' ')}</span>
                 </div>
-                <p className="font-medium">{evt.label}</p>
-                {evt.details && <p className="text-gray-400 text-sm">{evt.details}</p>}
+                <p className="font-medium">{evt.summary}</p>
                 <p className="text-xs text-gray-500 mt-1">Actor: {evt.actor}</p>
               </div>
             ))}
@@ -246,14 +225,45 @@ export default function LeadDetailPanel({ lead, loading, error }: LeadDetailPane
           </div>
         </div>
       </div>
-      <LeadAIReasoningModal
-        open={isReasoningModalOpen}
-        onClose={() => setIsReasoningModalOpen(false)}
-        leadId={lead.id}
-        loading={reasoningLoading}
-        reasoning={reasoning}
-        error={reasoningError}
-      />
+      {isReasoningModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setIsReasoningModalOpen(false)}
+        >
+          <div
+            className="bg-dark-surface border border-dark-border rounded-lg p-6 max-w-lg w-full m-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <BrainCircuit className="w-5 h-5 text-primary" />
+                <h3 className="text-sm font-semibold text-white">AI Thoughts — {lead.id}</h3>
+              </div>
+              <button
+                onClick={() => setIsReasoningModalOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-2 text-sm text-gray-200">
+              <p>
+                <span className="text-gray-500">Risk:</span> {lead.aiRiskLevel || '—'}
+              </p>
+              <p>
+                <span className="text-gray-500">Qualification:</span>{' '}
+                {lead.aiQualificationScore !== undefined ? `${lead.aiQualificationScore}/100` : '—'}
+              </p>
+              <p className="text-gray-300 whitespace-pre-wrap">
+                {lead.aiInsightSummary ||
+                  `This lead is a strong fit for ${lead.serviceLine || 'the service'}, coming from ${
+                    lead.channel || 'the channel'
+                  } with clear intent. Recommend quick follow-up within 24 hours.`}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import { Shield } from 'lucide-react'
 import clsx from 'clsx'
 import { McpSecurityAlert, McpSecurityMetrics } from '@/lib/mcp/types'
+import SecurityAlertModal from './SecurityAlertModal'
 
 export interface McpSecurityPanelProps {
   alerts: McpSecurityAlert[]
@@ -10,7 +12,16 @@ export interface McpSecurityPanelProps {
 }
 
 export default function McpSecurityPanel({ alerts, metrics }: McpSecurityPanelProps) {
+  const [selectedAlert, setSelectedAlert] = useState<McpSecurityAlert | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  const handleViewDetails = (alert: McpSecurityAlert) => {
+    setSelectedAlert(alert)
+    setIsModalOpen(true)
+  }
+
   return (
+    <>
     <div className="bg-dark-surface border border-dark-border rounded-xl p-8 shadow-lg">
       <div className="mb-6 pb-4 border-b border-white/10">
         <div className="flex items-center gap-3 mb-2">
@@ -68,7 +79,10 @@ export default function McpSecurityPanel({ alerts, metrics }: McpSecurityPanelPr
                     </div>
                   </div>
                 </div>
-                <button className="text-xs text-primary hover:text-primary-dark">
+                <button
+                  onClick={() => handleViewDetails(alert)}
+                  className="text-xs text-primary hover:text-primary-dark transition-colors"
+                >
                   View Details
                 </button>
               </div>
@@ -77,6 +91,15 @@ export default function McpSecurityPanel({ alerts, metrics }: McpSecurityPanelPr
         )}
       </div>
     </div>
+    <SecurityAlertModal
+      alert={selectedAlert}
+      isOpen={isModalOpen}
+      onClose={() => {
+        setIsModalOpen(false)
+        setSelectedAlert(null)
+      }}
+    />
+    </>
   )
 }
 

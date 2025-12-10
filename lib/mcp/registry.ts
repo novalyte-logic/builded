@@ -259,6 +259,59 @@ const marketIntelTools: Record<string, McpToolConfig> = {
       },
     },
   },
+  market_spike_detector: {
+    name: 'market-spike-detector',
+    description: 'Detect early TRT demand spikes across U.S. cities using Google Trends, SERP analysis, CPC estimates, intent scoring, and clinic availability data',
+    inputSchema: {
+      maxCities: {
+        type: 'number',
+        required: false,
+        description: 'Maximum number of cities to return (default: 10)',
+        default: 10,
+      },
+      minTrendPercent: {
+        type: 'number',
+        required: false,
+        description: 'Minimum trend increase percentage to consider (default: 20)',
+        default: 20,
+      },
+    },
+    outputSchema: {
+      top_cities: {
+        type: 'array',
+        description: 'Array of cities with spike data including trend_percent, search_volume, cpc, ad_density, intent_score, and clinic_gap',
+      },
+      recommendation: {
+        type: 'string',
+        description: 'Strategic recommendation for targeting hot regions',
+      },
+    },
+  },
+  trt_spike_locator: {
+    name: 'trt_spike_locator',
+    description: 'Identify real-time TRT demand spikes across target U.S. regions (Texas, Florida, Arizona, Colorado, California), analyze competitor ad activity, and recommend the best city for immediate lead monetization within 7 days',
+    inputSchema: {
+      // No input parameters - tool analyzes all target regions automatically
+    },
+    outputSchema: {
+      regions: {
+        type: 'array',
+        description: 'Array of region data with trend_24h, trend_7d, search_volume, ad_density, competitors_running_ads, cpc_estimate, intent_score, clinic_gap, lead_price_estimate, and why_this_city_is_hot',
+      },
+      best_region: {
+        type: 'string',
+        description: 'The top-ranked city/region for immediate targeting',
+      },
+      recommended_targeting: {
+        type: 'string',
+        description: 'Strategic recommendation for which city to target this week',
+      },
+      action_steps_for_next_7_days: {
+        type: 'string',
+        description: 'Specific actionable steps to start selling leads within 7 days',
+      },
+    },
+  },
 }
 
 // ============================================================================

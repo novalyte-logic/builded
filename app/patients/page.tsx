@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Calendar, MapPin, RefreshCw } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Calendar, MapPin, RefreshCw, Loader2 } from 'lucide-react'
 import KPICardWithSparkline from '@/components/patient-intelligence/KPICardWithSparkline'
 import PatientFunnel from '@/components/patient-intelligence/PatientFunnel'
 import CohortsByGoal from '@/components/patient-intelligence/CohortsByGoal'
@@ -9,89 +9,135 @@ import AIInsightsStrip from '@/components/patient-intelligence/AIInsightsStrip'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 import StatusBadge from '@/components/StatusBadge'
 
-interface SparklineDataPoint {
-  date: string
+type DateRange = '7d' | '30d' | '90d' | 'custom'
+type GeoMode = 'nationwide' | 'state' | 'city'
+
+type PatientFunnelStep = {
+  key: string
+  label: string
   value: number
+  conversionRate?: number
+}
+
+type CohortStat = {
+  key: string
+  label: string
+  percentage: number
+  topByVolume?: boolean
+  topByRevenue?: boolean
+  churnRiskPct?: number
+}
+
+type AiInsight = {
+  id: string
+  title: string
+  body: string
+}
+
+type PatientsOverviewResponse = {
+  filters: {
+    dateRange: DateRange
+    geoMode: GeoMode
+  }
+  topline: {
+    totalActivePatients: number
+    newAssessments7d: number
+    assessmentToConsultConversionPct: number
+    avgTimeAssessmentToVisitDays: number
+    trtSharePct: number
+    glp1SharePct: number
+    recoverySharePct: number
+    avgPatientLtvUsd: number
+  }
+  funnel: {
+    steps: PatientFunnelStep[]
+  }
+  cohorts: {
+    byPrimaryGoal: CohortStat[]
+  }
+  aiInsights: AiInsight[]
+  meta: {
+    lastUpdated: string
+  }
+  error?: string
+}
+
+function usePatientsOverview({ dateRange, geoMode }: { dateRange: DateRange; geoMode: GeoMode }) {
+  const [state, setState] = useState<{
+    data?: PatientsOverviewResponse
+    error?: Error
+    loading: boolean
+  }>({ loading: true })
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setState((prev) => ({ ...prev, loading: true }))
+      try {
+        const params = new URLSearchParams({
+          dateRange,
+          geoMode,
+        })
+        const res = await fetch(`/api/patients/overview?${params.toString()}`)
+        const json = (await res.json()) as PatientsOverviewResponse
+        if (!cancelled) {
+          setState({ data: json, error: undefined, loading: false })
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setState({ data: undefined, error: err as Error, loading: false })
+        }
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [dateRange, geoMode])
+
+  const refetch = async () => {
+    try {
+      const params = new URLSearchParams({
+        dateRange,
+        geoMode,
+      })
+      const res = await fetch(`/api/patients/overview?${params.toString()}`)
+      const json = (await res.json()) as PatientsOverviewResponse
+      setState({ data: json, error: undefined, loading: false })
+    } catch (err) {
+      setState((prev) => ({ data: prev.data, error: err as Error, loading: false }))
+    }
+  }
+
+  return {
+    data: state.data,
+    error: state.error,
+    isLoading: state.loading,
+    refetch,
+  }
+}
+
+function SkeletonTopline() {
+  return (
+    <div className="bg-dark-surface border border-dark-border rounded-lg p-4 animate-pulse">
+      <div className="h-3 w-24 bg-dark-border rounded mb-2" />
+      <div className="h-6 w-28 bg-dark-border rounded mb-3" />
+      <div className="h-2 w-16 bg-dark-border rounded" />
+    </div>
+  )
 }
 
 export default function PatientsPage() {
-  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'custom'>('30d')
-  const [geography, setGeography] = useState<'nationwide' | 'state' | 'city'>('nationwide')
+  const [timeRange, setTimeRange] = useState<DateRange>('30d')
+  const [geography, setGeography] = useState<GeoMode>('nationwide')
   const [selectedState, setSelectedState] = useState('')
   const [selectedCity, setSelectedCity] = useState('')
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
-
-  // Generate sparkline data (last 30 days) - will be replaced with real data from BigQuery
-  const generateSparklineData = (baseValue: number, variance: number = 0.1): SparklineDataPoint[] => {
-    const days = 30
-    const data: SparklineDataPoint[] = []
-    let currentValue = baseValue
-
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      currentValue = currentValue * (1 + (Math.random() - 0.5) * variance)
-      data.push({
-        date: date.toISOString().split('T')[0],
-        value: Math.max(0, Math.round(currentValue)),
-      })
-    }
-    return data
-  }
-
-  // Fetch patient intelligence data from API
-  const fetchPatientData = async () => {
-    setIsRefreshing(true)
-    try {
-      // TODO: Replace with actual API call
-      // const response = await fetch(`/api/admin/patient-intelligence?timeRange=${timeRange}&geography=${geography}&state=${selectedState}&city=${selectedCity}`)
-      // const data = await response.json()
-      
-      // For now, use mock data (already set below)
-      await new Promise((resolve) => setTimeout(resolve, 500)) // Simulate API call
-      setLastUpdated(new Date())
-    } catch (error) {
-      console.error('Error fetching patient data:', error)
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchPatientData()
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(fetchPatientData, 60000)
-    return () => clearInterval(interval)
-  }, [timeRange, geography, selectedState, selectedCity])
-
-  // KPI Data - Will be replaced with BigQuery data
-  const kpiData = {
-    totalActivePatients: {
-      value: formatNumber(47829),
-      sparkline: generateSparklineData(47000, 0.02),
-    },
-    newAssessments: {
-      value: formatNumber(1247),
-      sparkline: generateSparklineData(1200, 0.15),
-    },
-    conversionRate: {
-      value: '67.3%',
-      sparkline: generateSparklineData(67, 0.05),
-    },
-    avgTimeToVisit: {
-      value: '4.2 days',
-      sparkline: generateSparklineData(4.2, 0.1),
-    },
-    protocolSplit: {
-      value: 'TRT: 45% | GLP-1: 32% | Recovery: 23%',
-      sparkline: generateSparklineData(45, 0.03),
-    },
-    avgLTV: {
-      value: formatCurrency(3420),
-      sparkline: generateSparklineData(3400, 0.02),
-    },
-  }
+  const { data, error, isLoading, refetch } = usePatientsOverview({
+    dateRange: timeRange,
+    geoMode: geography,
+  })
+  const [toast, setToast] = useState<string | null>(null)
+  const lastUpdated = data?.meta?.lastUpdated ? new Date(data.meta.lastUpdated) : null
 
   // Funnel Data - Matches event schema: Page Visitor → Assessment Started → Completed → Qualified → Booked → Showed → Active Protocol
   const funnelData = [
@@ -239,17 +285,17 @@ export default function PatientsPage() {
             <div className="flex items-center gap-3">
               <StatusBadge status="live" />
               <button
-                onClick={fetchPatientData}
-                disabled={isRefreshing}
+                onClick={() => refetch()}
+                disabled={isLoading}
                 className="flex items-center gap-2 px-3 py-2 bg-dark-accent border border-dark-border rounded-lg text-gray-300 hover:text-white hover:bg-dark-hover transition-colors text-sm disabled:opacity-50"
               >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                Refresh
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                {isLoading ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Last updated: {lastUpdated.toLocaleTimeString()}
+            Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : '—'}
           </p>
         </div>
 
@@ -316,78 +362,91 @@ export default function PatientsPage() {
             Topline Metrics
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <KPICardWithSparkline
-              title="Total Active Patients (30d)"
-              value={kpiData.totalActivePatients.value}
-              sparklineData={kpiData.totalActivePatients.sparkline}
-              tooltipWhat="Number of unique patients who have interacted with Novalyte in the last 30 days (assessments, bookings, active protocols)."
-              tooltipWhy="Shows overall patient engagement and platform health. Growth here indicates expanding user base."
-              tooltipHow={[
-                'Active = any interaction in last 30 days',
-                'Includes all patient types',
-                'Core metric for platform scale',
-              ]}
-            />
-            <KPICardWithSparkline
-              title="New Assessments (7d)"
-              value={kpiData.newAssessments.value}
-              sparklineData={kpiData.newAssessments.sparkline}
-              tooltipWhat="Count of new Men&apos;s Health Assessments started in the last 7 days."
-              tooltipWhy="Leading indicator of pipeline health. More assessments = more potential patients = more revenue."
-              tooltipHow={[
-                'Tracks patient.assessment_start events',
-                '7-day window for recent trends',
-                'Filters out repeat assessments',
-              ]}
-            />
-            <KPICardWithSparkline
-              title="Assessment → Consult Conversion Rate"
-              value={kpiData.conversionRate.value}
-              sparklineData={kpiData.conversionRate.sparkline}
-              tooltipWhat="Percentage of completed assessments that result in a booked consultation."
-              tooltipWhy="Higher conversion = better qualification process = more efficient revenue generation."
-              tooltipHow={[
-                'Calculated: Booked / Completed Assessments',
-                'Excludes unqualified assessments',
-                'Key funnel metric',
-              ]}
-            />
-            <KPICardWithSparkline
-              title="Avg Time From Assessment → First Visit"
-              value={kpiData.avgTimeToVisit.value}
-              sparklineData={kpiData.avgTimeToVisit.sparkline}
-              tooltipWhat="Average number of days between assessment completion and first clinic visit."
-              tooltipWhy="Shorter time = faster revenue realization. Long delays indicate friction in booking process."
-              tooltipHow={[
-                'Days between assessment_completed and visit_date',
-                'Includes all qualified patients',
-                'Lower is better',
-              ]}
-            />
-            <KPICardWithSparkline
-              title="TRT vs GLP-1 vs Recovery Split (%)"
-              value={kpiData.protocolSplit.value}
-              sparklineData={kpiData.protocolSplit.sparkline}
-              tooltipWhat="Distribution of patients across primary treatment protocols: Hormones (TRT), Weight Loss (GLP-1), Recovery."
-              tooltipWhy="Shows market demand trends. Helps optimize content, inventory, and clinic capacity planning."
-              tooltipHow={[
-                'Based on recommended_path from assessments',
-                'Shows protocol preference',
-                'Helps resource allocation',
-              ]}
-            />
-            <KPICardWithSparkline
-              title="Avg Patient LTV (Projected)"
-              value={kpiData.avgLTV.value}
-              sparklineData={kpiData.avgLTV.sparkline}
-              tooltipWhat="Projected lifetime value per patient based on protocol type, retention patterns, and historical data."
-              tooltipWhy="Critical for CAC/LTV ratio. Higher LTV = more budget for acquisition = growth potential."
-              tooltipHow={[
-                'AI-modeled projection from historical data',
-                'Includes all revenue streams',
-                'Key for unit economics',
-              ]}
-            />
+            {isLoading || !data ? (
+              <>
+                <SkeletonTopline />
+                <SkeletonTopline />
+                <SkeletonTopline />
+                <SkeletonTopline />
+                <SkeletonTopline />
+                <SkeletonTopline />
+              </>
+            ) : (
+              <>
+                <KPICardWithSparkline
+                  title="Total Active Patients (30d)"
+                  value={formatNumber(data.topline.totalActivePatients)}
+                  sparklineData={[]}
+                  tooltipWhat="Number of unique patients who have interacted with Novalyte in the last 30 days (assessments, bookings, active protocols)."
+                  tooltipWhy="Shows overall patient engagement and platform health. Growth here indicates expanding user base."
+                  tooltipHow={[
+                    'Active = any interaction in last 30 days',
+                    'Includes all patient types',
+                    'Core metric for platform scale',
+                  ]}
+                />
+                <KPICardWithSparkline
+                  title="New Assessments (7d)"
+                  value={formatNumber(data.topline.newAssessments7d)}
+                  sparklineData={[]}
+                  tooltipWhat="Count of new Men&apos;s Health Assessments started in the last 7 days."
+                  tooltipWhy="Leading indicator of pipeline health. More assessments = more potential patients = more revenue."
+                  tooltipHow={[
+                    'Tracks patient.assessment_start events',
+                    '7-day window for recent trends',
+                    'Filters out repeat assessments',
+                  ]}
+                />
+                <KPICardWithSparkline
+                  title="Assessment → Consult Conversion Rate"
+                  value={`${data.topline.assessmentToConsultConversionPct.toFixed(1)}%`}
+                  sparklineData={[]}
+                  tooltipWhat="Percentage of completed assessments that result in a booked consultation."
+                  tooltipWhy="Higher conversion = better qualification process = more efficient revenue generation."
+                  tooltipHow={[
+                    'Calculated: Booked / Completed Assessments',
+                    'Excludes unqualified assessments',
+                    'Key funnel metric',
+                  ]}
+                />
+                <KPICardWithSparkline
+                  title="Avg Time From Assessment → First Visit"
+                  value={`${data.topline.avgTimeAssessmentToVisitDays.toFixed(1)} days`}
+                  sparklineData={[]}
+                  tooltipWhat="Average number of days between assessment completion and first clinic visit."
+                  tooltipWhy="Shorter time = faster revenue realization. Long delays indicate friction in booking process."
+                  tooltipHow={[
+                    'Days between assessment_completed and visit_date',
+                    'Includes all qualified patients',
+                    'Lower is better',
+                  ]}
+                />
+                <KPICardWithSparkline
+                  title="TRT vs GLP-1 vs Recovery Split (%)"
+                  value={`TRT: ${data.topline.trtSharePct}% | GLP-1: ${data.topline.glp1SharePct}% | Recovery: ${data.topline.recoverySharePct}%`}
+                  sparklineData={[]}
+                  tooltipWhat="Distribution of patients across primary treatment protocols: Hormones (TRT), Weight Loss (GLP-1), Recovery."
+                  tooltipWhy="Shows market demand trends. Helps optimize content, inventory, and clinic capacity planning."
+                  tooltipHow={[
+                    'Based on recommended_path from assessments',
+                    'Shows protocol preference',
+                    'Helps resource allocation',
+                  ]}
+                />
+                <KPICardWithSparkline
+                  title="Avg Patient LTV (Projected)"
+                  value={formatCurrency(data.topline.avgPatientLtvUsd)}
+                  sparklineData={[]}
+                  tooltipWhat="Projected lifetime value per patient based on protocol type, retention patterns, and historical data."
+                  tooltipWhy="Critical for CAC/LTV ratio. Higher LTV = more budget for acquisition = growth potential."
+                  tooltipHow={[
+                    'AI-modeled projection from historical data',
+                    'Includes all revenue streams',
+                    'Key for unit economics',
+                  ]}
+                />
+              </>
+            )}
           </div>
         </div>
 
@@ -402,35 +461,96 @@ export default function PatientsPage() {
               <h3 className="text-lg font-semibold text-white mb-4">
                 Patient Funnel — From Interest to Treatment
               </h3>
-              <PatientFunnel data={funnelData} />
+              {isLoading || !data ? (
+                <div className="h-64 bg-dark-surface/60 border border-dark-border rounded-lg animate-pulse" />
+              ) : (
+                <PatientFunnel
+                  data={data.funnel.steps.map((step) => ({
+                    step: step.label,
+                    count: step.value,
+                    dropoff: step.conversionRate ? 100 - step.conversionRate : undefined,
+                    topReasons: undefined,
+                  }))}
+                />
+              )}
             </div>
 
             {/* Right: Cohorts by Primary Goal */}
             <div className="bg-dark-accent border border-dark-border rounded-lg p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Cohorts by Primary Goal</h3>
-              <CohortsByGoal data={cohortData} />
+              {isLoading || !data ? (
+                <div className="h-64 bg-dark-surface/60 border border-dark-border rounded-lg animate-pulse" />
+              ) : (
+                <CohortsByGoal
+                  data={data.cohorts.byPrimaryGoal.map((c) => ({
+                    name: c.label,
+                    value: Math.round((data.topline.totalActivePatients * c.percentage) / 100),
+                    revenue: Math.round((data.topline.avgPatientLtvUsd * (c.percentage / 100)) * 1200),
+                    churnRisk: c.churnRiskPct || 0,
+                  }))}
+                />
+              )}
             </div>
           </div>
         </div>
 
         {/* ROW 3: AI Insights Strip */}
         <div>
-          <AIInsightsStrip
-            insights={aiInsights}
-            onViewAtRisk={() => {
-              // TODO: Navigate to at-risk patients view
-              console.log('View at-risk patients')
-            }}
-            onLaunchReactivation={() => {
-              // TODO: Open reactivation campaign modal
-              console.log('Launch reactivation sequence')
-            }}
-            onSuggestBlog={() => {
-              // TODO: Generate blog topic suggestions
-              console.log('Suggest blog topics')
-            }}
-          />
+          {isLoading || !data ? (
+            <div className="h-40 bg-dark-surface/60 border border-dark-border rounded-lg animate-pulse" />
+          ) : (
+            <AIInsightsStrip
+              insights={data.aiInsights.map((insight) => ({
+                text: `${insight.title} — ${insight.body}`,
+                type: insight.body.toLowerCase().includes('spike') || insight.body.toLowerCase().includes('latency')
+                  ? 'warning'
+                  : insight.body.toLowerCase().includes('higher') || insight.body.toLowerCase().includes('retention')
+                  ? 'positive'
+                  : 'neutral',
+              }))}
+              onViewAtRisk={async () => {
+                const res = await fetch('/api/patients/at-risk', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ dateRange: timeRange, geoMode: geography }),
+                })
+                const json = await res.json()
+                if (json?.suggestedSegments) {
+                  setToast(`At-risk segments: ${json.suggestedSegments.length}`)
+                } else {
+                  setToast('Failed to fetch at-risk patients')
+                }
+              }}
+              onLaunchReactivation={async () => {
+                const res = await fetch('/api/patients/reactivation', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ segmentKey: 'at_risk_default' }),
+                })
+                const json = await res.json()
+                setToast(json?.message || 'Reactivation triggered (mock)')
+              }}
+              onSuggestBlog={async () => {
+                const res = await fetch('/api/patients/blog-topics', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ focus: 'patient_activity_last_7_days' }),
+                })
+                const json = await res.json()
+                if (json?.topics) {
+                  setToast(`Suggested topics: ${json.topics.length}`)
+                } else {
+                  setToast('Failed to suggest topics')
+                }
+              }}
+            />
+          )}
         </div>
+        {toast && (
+          <div className="fixed bottom-4 right-4 bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-sm text-gray-200 shadow-lg">
+            {toast}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,324 +1,220 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Building2, Plus, AlertTriangle, AlertCircle, ChevronUp, ChevronDown, Search, Sparkles, TrendingUp, Target, ExternalLink, MapPin, ArrowRight } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Building2,
+  Plus,
+  AlertTriangle,
+  ChevronUp,
+  ChevronDown,
+  Search,
+  Sparkles,
+  TrendingUp,
+  Target,
+  ExternalLink,
+  Loader2,
+  ArrowRight,
+} from 'lucide-react'
 import Link from 'next/link'
 import clsx from 'clsx'
 import StatusBadge from '@/components/StatusBadge'
-import ClinicEditor from '@/components/clinics/ClinicEditor'
-import { ClinicProfile } from '@/lib/types/clinic'
+import {
+  ClinicDirectoryRecord,
+  ClinicDirectoryStatus,
+  ClinicLeadStatus,
+  ClinicPriceBand,
+  ClinicVisibility,
+  ClinicMarketIntelResponse,
+} from '@/lib/types/clinicDirectory'
 
 type SortField = 'name' | 'location' | 'status' | 'price_band' | 'updated_at'
 type SortDirection = 'asc' | 'desc'
 
-interface RegionDemand {
-  region: string
-  serviceLine: string
-  demandIndex: number
-  trend: 'Rising' | 'Stable' | 'Falling'
-  sampleSize?: number
-}
-
-interface TargetClinic {
-  clinic_id: string
-  name: string
-  city: string
-  state: string
-  serviceLines: string[]
-  why_target: string
-}
-
-interface MarketIntelResult {
-  interpretedQuestion: string
-  topRegions: Array<{ region: string; reason: string; suggestedBudgetShare: number }>
-  targetClinics: TargetClinic[]
-  primaryMove: string
-  secondaryMoves: string[]
-  regionDemand: RegionDemand[]
-  trendsData?: {
-    serviceLine: string
-    region: string
-    timeRange: string
-    trendDirection: 'RISING' | 'STABLE' | 'FALLING'
-    trendStrength: number
-    topRegions: Array<{ region: string; interestIndex: number }>
-    risingQueries: Array<{ query: string; growthScore: number }>
-  }
-  trendsError?: string
-  trendSummary?: string
-  trendConfidence?: number
-  firstMove?: string
-  firstMoveReason?: string
-}
-
 const QUICK_ACTIONS = [
-  "Where are TRT clinics needing patients?",
-  "Where are weight loss clinics needing patients?",
-  "Which clinics in Texas should we send TRT leads to?",
-  "Which regions are best for IV therapy ads this month?"
+  'Where are TRT clinics needing patients?',
+  'Where are weight loss clinics needing patients?',
+  'Which clinics in Texas should we send TRT leads to?',
+  'Which regions are best for IV therapy ads this month?',
 ]
 
 export default function ClinicsControlPage() {
+  const [clinics, setClinics] = useState<ClinicDirectoryRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedClinicId, setSelectedClinicId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [clinics, setClinics] = useState<ClinicProfile[]>([])
-  const [loading, setLoading] = useState(true)
   
-  // Filters
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
-  const [priceBandFilter, setPriceBandFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | ClinicDirectoryStatus>('ALL')
+  const [priceBandFilter, setPriceBandFilter] = useState<'ALL' | ClinicPriceBand>('ALL')
+  const [visibilityFilter, setVisibilityFilter] = useState<'ALL' | ClinicVisibility>('ALL')
   
-  // Sorting
   const [sortField, setSortField] = useState<SortField>('updated_at')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   
-  // Market Intel state
-  const [showMarketIntel, setShowMarketIntel] = useState(true)
+  const [pendingEdits, setPendingEdits] = useState<Partial<ClinicDirectoryRecord>>({})
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [runningRouting, setRunningRouting] = useState(false)
+
   const [marketQuery, setMarketQuery] = useState('')
   const [scanningMarket, setScanningMarket] = useState(false)
-  const [marketIntelResult, setMarketIntelResult] = useState<MarketIntelResult | null>(null)
+  const [marketIntelResult, setMarketIntelResult] = useState<ClinicMarketIntelResponse | null>(null)
   const [marketIntelError, setMarketIntelError] = useState<string | null>(null)
+  const [showMarketIntel, setShowMarketIntel] = useState(true)
 
-  // Ad Activity & Outreach state
-  const [adsActivity, setAdsActivity] = useState<any>(null)
-  const [outreachStrategy, setOutreachStrategy] = useState<any>(null)
-  const [loadingAdsIntel, setLoadingAdsIntel] = useState(false)
-  const [adsIntelError, setAdsIntelError] = useState<string | null>(null)
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    city: '',
+    state: '',
+    serviceLines: [] as string[],
+    status: 'pending' as ClinicDirectoryStatus,
+    priceBand: '$$' as ClinicPriceBand,
+    leadStatus: 'pending_verification' as ClinicLeadStatus,
+    visibility: 'shown' as ClinicVisibility,
+  })
+
+  const deriveRoutingForClinic = (clinic: ClinicDirectoryRecord) => {
+    const includes = (key: string) => clinic.serviceLines.some((s) => s.toUpperCase() === key.toUpperCase())
+    let emphasis: ClinicDirectoryRecord['marketplaceEmphasis'] = {
+      supplements: 'medium',
+      diagnostics: 'medium',
+      peptides: 'low',
+      equipment: 'medium',
+      healthTech: 'medium',
+    }
+
+    if (includes('PEPTIDES')) {
+      emphasis = {
+        peptides: 'high',
+        diagnostics: 'medium',
+        equipment: 'medium',
+        supplements: 'medium',
+        healthTech: 'medium',
+      }
+    } else if (includes('TRT')) {
+      emphasis = {
+        diagnostics: 'high',
+        supplements: 'high',
+        equipment: 'medium',
+        peptides: 'medium',
+        healthTech: 'medium',
+      }
+    } else if (includes('RECOVERY')) {
+      emphasis = {
+        equipment: 'high',
+        peptides: 'medium',
+        supplements: 'medium',
+        diagnostics: 'medium',
+        healthTech: 'medium',
+      }
+    } else if (includes('GLP1')) {
+      emphasis = {
+        supplements: 'high',
+        diagnostics: 'high',
+        peptides: 'medium',
+        equipment: 'low',
+        healthTech: 'medium',
+      }
+    }
+
+    let leadPriority: ClinicDirectoryRecord['leadPriority'] = 'backup'
+    if (clinic.leadStatus === 'at_capacity') {
+      leadPriority = 'overflow'
+    } else if ((clinic.revenuePerPatient || 0) >= 500) {
+      leadPriority = 'primary'
+    }
+
+    return {
+      leadPriority,
+      focusServiceLines: clinic.serviceLines,
+      marketplaceEmphasis: emphasis,
+    }
+  }
 
   useEffect(() => {
     fetchClinics()
-  }, [])
-
-  // Fetch ads activity and outreach strategy
-  const fetchAdsActivityAndOutreach = useCallback(async () => {
-    const currentClinic = clinics.find((c) => c.id === selectedClinicId) || null
-    if (!currentClinic) return
-
-    setLoadingAdsIntel(true)
-    setAdsIntelError(null)
-
-    try {
-      // Build clinic profile
-      const clinicProfile = {
-        name: currentClinic.name,
-        location: {
-          city: currentClinic.city,
-          state: currentClinic.state,
-        },
-        serviceLines: currentClinic.specialties || [],
-        priceBand: currentClinic.price_band || '$$',
-        leadStatus: (currentClinic as any).lead_status || 'actively_accepting',
-      }
-
-      // Determine primary service line
-      const primaryServiceLine = currentClinic.specialties?.[0] || 'GENERAL'
-      const serviceLineMap: Record<string, string> = {
-        'TRT': 'TRT',
-        'GLP-1': 'WEIGHT_LOSS',
-        'Weight Loss': 'WEIGHT_LOSS',
-        'IV Therapy': 'IV_THERAPY',
-        'IV': 'IV_THERAPY',
-      }
-      const mappedServiceLine = serviceLineMap[primaryServiceLine] || 'GENERAL'
-
-      // Build region string
-      const region = currentClinic.state ? `US-${currentClinic.state}` : undefined
-
-      // Step 1: Fetch ads activity
-      const adsResponse = await fetch('/api/admin/mcp/market-intel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'ads_intel_clinic_activity',
-          params: {
-            clinicName: currentClinic.name,
-            domain: (currentClinic as any).website_url || undefined,
-            region,
-            serviceLine: mappedServiceLine,
-          },
-        }),
-      })
-
-      if (!adsResponse.ok) {
-        throw new Error('Failed to fetch ads activity')
-      }
-
-      const adsData = await adsResponse.json()
-      const adsActivityResult = adsData.results
-      setAdsActivity(adsActivityResult)
-
-      // Step 2: Optionally fetch market demand
-      let marketDemand = null
-      if (region && mappedServiceLine !== 'GENERAL') {
-        try {
-          const demandResponse = await fetch('/api/admin/mcp/market-intel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tool: 'bigquery_region_demand',
-              params: {
-                serviceLine: mappedServiceLine,
-              },
-            }),
-          })
-
-          if (demandResponse.ok) {
-            const demandData = await demandResponse.json()
-            const regionDemand = demandData.results.find((r: any) => 
-              r.region === currentClinic.state || r.region.includes(currentClinic.state)
-            )
-            if (regionDemand) {
-              marketDemand = {
-                region: regionDemand.region,
-                serviceLine: regionDemand.serviceLine,
-                demandIndex: regionDemand.demand_index,
-                trend: regionDemand.trend,
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to fetch market demand, continuing without it:', error)
-        }
-      }
-
-      // Step 3: Generate outreach strategy
-      const outreachResponse = await fetch('/api/admin/mcp/market-intel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'vertex_clinic_outreach_brain',
-          params: {
-            clinicProfile,
-            adsActivity: adsActivityResult,
-            marketDemand,
-          },
-        }),
-      })
-
-      if (!outreachResponse.ok) {
-        throw new Error('Failed to generate outreach strategy')
-      }
-
-      const outreachData = await outreachResponse.json()
-      setOutreachStrategy(outreachData.results)
-    } catch (error) {
-      console.error('Error fetching ads activity and outreach:', error)
-      setAdsIntelError(error instanceof Error ? error.message : 'Unknown error')
-    } finally {
-      setLoadingAdsIntel(false)
-    }
-  }, [clinics, selectedClinicId])
-
-  // Get selected clinic object
-  const selectedClinic = clinics.find((c) => c.id === selectedClinicId) || null
-
-  // Fetch ads activity and outreach when clinic is selected
-  useEffect(() => {
-    if (selectedClinicId && selectedClinic) {
-      fetchAdsActivityAndOutreach()
-    } else {
-      setAdsActivity(null)
-      setOutreachStrategy(null)
-    }
-  }, [selectedClinicId, selectedClinic, fetchAdsActivityAndOutreach])
+  }, [searchTerm, statusFilter, priceBandFilter, visibilityFilter])
 
   const fetchClinics = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/admin/clinics')
-      if (!response.ok) throw new Error('Failed to fetch clinics')
-      const data = await response.json()
+      setError(null)
+      const params = new URLSearchParams()
+      if (searchTerm) params.set('search', searchTerm)
+      params.set('status', statusFilter)
+      params.set('priceBand', priceBandFilter)
+      params.set('visibility', visibilityFilter)
+      const res = await fetch(`/api/clinics-directory?${params.toString()}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to load clinics')
       setClinics(data.clinics || [])
-    } catch (error) {
-      console.error('Error fetching clinics:', error)
+      if (!selectedClinicId && data.clinics?.length) {
+        setSelectedClinicId(data.clinics[0].id)
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to load clinics')
+      setClinics([])
     } finally {
       setLoading(false)
     }
   }
 
-  // Compute lead status from notes_internal
-  const getLeadStatus = (clinic: ClinicProfile): string => {
-    const notes = (clinic.notes_internal || '').toLowerCase()
-    if (notes.includes('at capacity') || notes.includes('paused')) {
-      return 'At capacity'
-    }
-    if (notes.includes('actively accepting') || notes.includes('accepting')) {
-      return 'Actively accepting'
-    }
-    if (clinic.verification_status === 'pending') {
-      return 'Pending verification'
-    }
-    if (clinic.verification_status === 'rejected' || !clinic.show_in_directory) {
-      return 'Paused'
-    }
-    return 'Open'
-  }
+  const selectedClinic = clinics.find((c) => c.id === selectedClinicId) || null
 
-  // Filter and sort clinics
   const filteredAndSortedClinics = useMemo(() => {
     let filtered = [...clinics]
-
-    // Search filter
     if (searchTerm) {
-      const term = searchTerm.toLowerCase()
+      const t = searchTerm.toLowerCase()
       filtered = filtered.filter(
         (c) =>
-          c.name.toLowerCase().includes(term) ||
-          c.city.toLowerCase().includes(term) ||
-          c.state?.toLowerCase().includes(term) ||
-          c.specialties.some((s) => s.toLowerCase().includes(term))
+          c.name.toLowerCase().includes(t) ||
+          c.city.toLowerCase().includes(t) ||
+          c.state.toLowerCase().includes(t) ||
+          c.serviceLines.some((s) => s.toLowerCase().includes(t))
       )
     }
+    if (statusFilter !== 'ALL') filtered = filtered.filter((c) => c.status === statusFilter)
+    if (priceBandFilter !== 'ALL') filtered = filtered.filter((c) => c.priceBand === priceBandFilter)
+    if (visibilityFilter !== 'ALL') filtered = filtered.filter((c) => c.visibility === visibilityFilter)
 
-    // Status filter
-    if (statusFilter) {
-      filtered = filtered.filter((c) => c.verification_status === statusFilter)
-    }
-
-    // Price band filter
-    if (priceBandFilter) {
-      filtered = filtered.filter((c) => c.price_band === priceBandFilter)
-    }
-
-    // Sorting
     filtered.sort((a, b) => {
       let aVal: any
       let bVal: any
-
       switch (sortField) {
         case 'name':
           aVal = a.name.toLowerCase()
           bVal = b.name.toLowerCase()
           break
         case 'location':
-          aVal = `${a.city}${a.state || ''}`.toLowerCase()
-          bVal = `${b.city}${b.state || ''}`.toLowerCase()
+          aVal = `${a.city}${a.state}`.toLowerCase()
+          bVal = `${b.city}${b.state}`.toLowerCase()
           break
         case 'status':
-          aVal = a.verification_status
-          bVal = b.verification_status
+          aVal = a.status
+          bVal = b.status
           break
-        case 'price_band':
-          const priceMap: Record<string, number> = { $: 1, $$: 2, $$$: 3, $$$$: 4 }
-          aVal = priceMap[a.price_band] || 0
-          bVal = priceMap[b.price_band] || 0
+        case 'price_band': {
+          const map: Record<string, number> = { $: 1, $$: 2, $$$: 3, $$$$: 4 }
+          aVal = map[a.priceBand] || 0
+          bVal = map[b.priceBand] || 0
           break
+        }
         case 'updated_at':
-          aVal = new Date(a.updated_at).getTime()
-          bVal = new Date(b.updated_at).getTime()
+          aVal = new Date(a.updatedAt).getTime()
+          bVal = new Date(b.updatedAt).getTime()
           break
         default:
-          return 0
+          aVal = 0
+          bVal = 0
       }
-
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
       return 0
     })
 
     return filtered
-  }, [clinics, searchTerm, statusFilter, priceBandFilter, sortField, sortDirection])
+  }, [clinics, searchTerm, statusFilter, priceBandFilter, visibilityFilter, sortField, sortDirection])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -329,122 +225,99 @@ export default function ClinicsControlPage() {
     }
   }
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return null
-    return sortDirection === 'asc' ? (
-      <ChevronUp className="w-4 h-4" />
-    ) : (
-      <ChevronDown className="w-4 h-4" />
-    )
-  }
+  const SortIcon = ({ field }: { field: SortField }) =>
+    sortField === field ? sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" /> : null
 
-  // Handle market intelligence scan
-  const handleMarketScan = async (questionOverride?: string) => {
-    let question = questionOverride || marketQuery.trim()
-    
-    // Auto-generate question if none provided and clinic is selected
-    if (!question && selectedClinic) {
-      const serviceText = selectedClinic.specialties.slice(0, 2).join(' and ')
-      question = `Does ${selectedClinic.city}, ${selectedClinic.state} need more ${serviceText} ads right now for ${selectedClinic.name}?`
-      setMarketQuery(question)
-    }
-    
+  const handleMarketScan = async (preset?: string) => {
+    const question = (preset || marketQuery).trim()
     if (!question) {
-      setMarketIntelError('Please enter a question or select a clinic')
+      setMarketIntelError('Please enter a question')
       return
     }
-
     setScanningMarket(true)
     setMarketIntelError(null)
-
     try {
-      // Infer service line and region from question and selected clinic
-      const questionLower = question.toLowerCase()
-      let serviceLine = ''
-      let region = ''
-      
-      // Infer service line
-      if (questionLower.includes('trt') || questionLower.includes('testosterone')) {
-        serviceLine = 'TRT'
-      } else if (questionLower.includes('weight loss') || questionLower.includes('glp')) {
-        serviceLine = 'WEIGHT_LOSS'
-      } else if (questionLower.includes('iv therapy') || questionLower.includes('iv ')) {
-        serviceLine = 'IV_THERAPY'
-      } else if (selectedClinic) {
-        // Infer from selected clinic's service lines
-        if (selectedClinic.specialties.includes('TRT')) serviceLine = 'TRT'
-        else if (selectedClinic.specialties.includes('GLP-1')) serviceLine = 'WEIGHT_LOSS'
-        else if (selectedClinic.specialties.includes('IV Therapy')) serviceLine = 'IV_THERAPY'
-      }
-      
-      // Infer region
-      if (questionLower.includes('texas') || questionLower.includes(' tx')) {
-        region = 'TX'
-      } else if (questionLower.includes('florida') || questionLower.includes(' fl')) {
-        region = 'FL'
-      } else if (questionLower.includes('california') || questionLower.includes(' ca')) {
-        region = 'CA'
-      } else if (selectedClinic && selectedClinic.state) {
-        region = selectedClinic.state
-      }
-
-      // Call MCP orchestration
-      const response = await fetch('/api/admin/mcp/market-intel', {
+      const res = await fetch('/api/clinics-directory/market-intel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question,
-          tool: 'orchestrate',
-          params: { serviceLine, region },
-        }),
+        body: JSON.stringify({ query: question }),
       })
-
-      if (!response.ok) {
-        throw new Error('Market intelligence scan failed')
-      }
-
-      const data = await response.json()
-      
-      // Map to result format
-      const { regionDemand, clinicMatches, trendsData: trends, trendsError: trendsErr, analysis } = data
-      
-      const result: MarketIntelResult = {
-        interpretedQuestion: analysis.interpretedQuestion,
-        topRegions: analysis.topRegions,
-        targetClinics: analysis.targetClinics.map((tc: any) => ({
-          ...tc,
-          city: clinicMatches.find((cm: any) => cm.clinic_id === tc.clinic_id)?.city || '',
-          serviceLines: clinicMatches.find((cm: any) => cm.clinic_id === tc.clinic_id)?.service_lines || [],
-        })),
-        primaryMove: analysis.primaryMove,
-        secondaryMoves: analysis.secondaryMoves,
-        regionDemand: regionDemand.map((rd: any) => ({
-          region: rd.region,
-          serviceLine: rd.serviceLine,
-          demandIndex: rd.demand_index,
-          trend: rd.trend === 'RISING' ? 'Rising' : rd.trend === 'FALLING' ? 'Falling' : 'Stable',
-          sampleSize: rd.sample_size,
-        })),
-        trendsData: trends || undefined,
-        trendsError: trendsErr || undefined,
-        trendSummary: analysis.trendSummary,
-        trendConfidence: analysis.trendConfidence,
-        firstMove: analysis.firstMove,
-        firstMoveReason: analysis.firstMoveReason,
-      }
-      
-      setMarketIntelResult(result)
-    } catch (error) {
-      console.error('Market scan error:', error)
-      setMarketIntelError('Market scan failed. Try again or refine your question.')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Scan failed')
+      setMarketIntelResult(data)
+      setMarketQuery(question)
+    } catch (e: any) {
+      setMarketIntelError(e.message || 'Scan failed')
+      setMarketIntelResult(null)
     } finally {
       setScanningMarket(false)
     }
   }
 
-  const handleQuickAction = (action: string) => {
-    setMarketQuery(action)
-    handleMarketScan(action)
+  const handleSaveEdits = async () => {
+    if (!selectedClinic) return
+    setSaving(true)
+    setSaveMessage(null)
+    try {
+      const res = await fetch('/api/clinics-directory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedClinic.id, updates: pendingEdits }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save')
+      setPendingEdits({})
+      setSaveMessage('Saved')
+      await fetchClinics()
+    } catch (e: any) {
+      setSaveMessage(e.message || 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRunTxRouting = async () => {
+    if (!selectedClinic) return
+    setRunningRouting(true)
+    setSaveMessage(null)
+    try {
+      const updates = deriveRoutingForClinic(selectedClinic)
+      const res = await fetch('/api/clinics-directory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedClinic.id, updates }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to run routing')
+      setPendingEdits({})
+      setSaveMessage('Routing applied')
+      await fetchClinics()
+    } catch (e: any) {
+      setSaveMessage(e.message || 'Failed to run routing')
+    } finally {
+      setRunningRouting(false)
+    }
+  }
+
+  const handleCreate = async () => {
+    try {
+      setSaving(true)
+      setSaveMessage(null)
+      const res = await fetch('/api/clinics-directory/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to create')
+      setShowCreate(false)
+      await fetchClinics()
+      setSelectedClinicId(data.clinic?.id || null)
+    } catch (e: any) {
+      setSaveMessage(e.message || 'Failed to create')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -475,7 +348,6 @@ export default function ClinicsControlPage() {
           </div>
         </div>
 
-        {/* Cross-talk Banner */}
         {selectedClinic && (
           <div className="mt-4 bg-primary/10 border border-primary/30 rounded-lg p-4">
             <div className="flex items-center justify-between">
@@ -486,7 +358,7 @@ export default function ClinicsControlPage() {
                 </p>
               </div>
               <Link
-                href={`/admin/market-intelligence?clinic=${encodeURIComponent(selectedClinic.name)}&region=${encodeURIComponent(`${selectedClinic.city}, ${selectedClinic.state}`)}&serviceLine=${encodeURIComponent(selectedClinic.specialties[0] || 'TRT')}`}
+                href={`/admin/market-intelligence?clinic=${encodeURIComponent(selectedClinic.name)}&region=${encodeURIComponent(`${selectedClinic.city}, ${selectedClinic.state}`)}`}
                 className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm"
               >
                 Open Market Intel
@@ -496,13 +368,10 @@ export default function ClinicsControlPage() {
           </div>
         )}
 
-        {/* Warning Banner */}
         <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-yellow-400">
-              You are editing LIVE production data
-            </p>
+            <p className="text-sm font-medium text-yellow-400">You are editing LIVE production data</p>
             <p className="text-xs text-gray-400 mt-1">
               Changes sync immediately to app.novalyte.io. All edits are logged with audit trail.
             </p>
@@ -511,10 +380,8 @@ export default function ClinicsControlPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left: Clinic Table */}
         <div className="lg:col-span-3">
           <div className="bg-dark-surface border border-dark-border rounded-lg">
-            {/* Filters */}
             <div className="p-4 border-b border-dark-border space-y-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -526,87 +393,90 @@ export default function ClinicsControlPage() {
                   className="w-full bg-dark-accent border border-dark-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => setStatusFilter(e.target.value as ClinicDirectoryStatus | 'ALL')}
                   className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-primary"
                 >
-                  <option value="">All Status</option>
+                  <option value="ALL">All Status</option>
                   <option value="verified">Verified</option>
                   <option value="pending">Pending</option>
                   <option value="rejected">Rejected</option>
                 </select>
-
                 <select
                   value={priceBandFilter}
-                  onChange={(e) => setPriceBandFilter(e.target.value)}
+                  onChange={(e) => setPriceBandFilter(e.target.value as ClinicPriceBand | 'ALL')}
                   className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-primary"
                 >
-                  <option value="">All Price Bands</option>
+                  <option value="ALL">All Price Bands</option>
                   <option value="$">$</option>
                   <option value="$$">$$</option>
                   <option value="$$$">$$$</option>
                   <option value="$$$$">$$$$</option>
                 </select>
+                <select
+                  value={visibilityFilter}
+                  onChange={(e) => setVisibilityFilter(e.target.value as ClinicVisibility | 'ALL')}
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-primary"
+                >
+                  <option value="ALL">All Visibility</option>
+                  <option value="shown">Shown</option>
+                  <option value="hidden">Hidden</option>
+                </select>
+                <button
+                  onClick={() => {
+                    setSearchTerm('')
+                    setStatusFilter('ALL')
+                    setPriceBandFilter('ALL')
+                    setVisibilityFilter('ALL')
+                  }}
+                  className="text-xs text-gray-400 hover:text-white transition-colors text-left"
+                >
+                  Reset Filters
+                </button>
               </div>
+              {error && (
+                <div className="px-3 py-2 text-sm text-status-offline bg-status-offline/10 border border-status-offline/30 rounded">
+                  {error}
+                </div>
+              )}
             </div>
 
-            {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-dark-accent border-b border-dark-border">
                   <tr>
-                    <th
-                      onClick={() => handleSort('name')}
-                      className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
-                    >
+                    <th onClick={() => handleSort('name')} className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
                       <div className="flex items-center gap-1">
                         Clinic Name
                         <SortIcon field="name" />
                       </div>
                     </th>
-                    <th
-                      onClick={() => handleSort('location')}
-                      className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
-                    >
+                    <th onClick={() => handleSort('location')} className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
                       <div className="flex items-center gap-1">
                         Location
                         <SortIcon field="location" />
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Service Lines
-                    </th>
-                    <th
-                      onClick={() => handleSort('status')}
-                      className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
-                    >
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">Service Lines</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">Lead Priority</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">Focus</th>
+                    <th onClick={() => handleSort('status')} className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
                       <div className="flex items-center gap-1">
                         Status
                         <SortIcon field="status" />
                       </div>
                     </th>
-                    <th
-                      onClick={() => handleSort('price_band')}
-                      className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
-                    >
+                    <th onClick={() => handleSort('price_band')} className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
                       <div className="flex items-center gap-1">
                         Price
                         <SortIcon field="price_band" />
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Lead Status
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Visibility
-                    </th>
-                    <th
-                      onClick={() => handleSort('updated_at')}
-                      className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
-                    >
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">Lead Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">Visibility</th>
+                    <th onClick={() => handleSort('updated_at')} className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
                       <div className="flex items-center gap-1">
                         Updated
                         <SortIcon field="updated_at" />
@@ -615,20 +485,23 @@ export default function ClinicsControlPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-border">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
-                        Loading clinics...
+                  {loading
+                    ? Array.from({ length: 6 }).map((_, idx) => (
+                        <tr key={idx}>
+                          <td colSpan={8} className="px-4 py-4">
+                            <div className="h-4 bg-dark-border/60 rounded animate-pulse" />
                       </td>
                     </tr>
-                  ) : filteredAndSortedClinics.length === 0 ? (
+                      ))
+                    : filteredAndSortedClinics.length === 0
+                    ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                         No clinics found
                       </td>
                     </tr>
-                  ) : (
-                    filteredAndSortedClinics.map((clinic) => (
+                      )
+                    : filteredAndSortedClinics.map((clinic) => (
                       <tr
                         key={clinic.id}
               onClick={() => {
@@ -643,99 +516,114 @@ export default function ClinicsControlPage() {
                         <td className="px-4 py-3 text-sm text-white font-medium">
                           <div className="flex items-center gap-2">
                             {clinic.name}
-                            {clinic.is_featured && (
-                              <span className="text-xs text-primary">★</span>
-                            )}
+                              {clinic.isFeatured && <span className="text-xs text-primary">★</span>}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-300">
-                          {clinic.city}, {clinic.state || clinic.country}
+                            {clinic.city}, {clinic.state}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-300">
                           <div className="flex flex-wrap gap-1">
-                            {clinic.specialties.slice(0, 3).map((spec, idx) => (
-                              <span
-                                key={idx}
-                                className="text-xs px-1.5 py-0.5 bg-dark-accent rounded text-gray-400"
-                              >
-                                {spec}
+                              {clinic.serviceLines.slice(0, 3).map((s, idx) => (
+                                <span key={idx} className="text-xs px-1.5 py-0.5 bg-dark-accent rounded text-gray-400">
+                                  {s}
                               </span>
                             ))}
-                            {clinic.specialties.length > 3 && (
-                              <span className="text-xs text-gray-500">
-                                +{clinic.specialties.length - 3}
-                              </span>
+                              {clinic.serviceLines.length > 3 && (
+                                <span className="text-xs text-gray-500">+{clinic.serviceLines.length - 3}</span>
                             )}
                           </div>
                         </td>
+                          <td className="px-4 py-3 text-sm">
+                            {clinic.leadPriority ? (
+                              <span
+                                className={clsx(
+                                  'px-2 py-1 rounded-full text-xs font-medium border',
+                                  clinic.leadPriority === 'primary' && 'bg-status-live/10 text-status-live border-status-live/30',
+                                  clinic.leadPriority === 'backup' && 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+                                  clinic.leadPriority === 'overflow' && 'bg-status-offline/10 text-status-offline border-status-offline/30'
+                                )}
+                              >
+                                {clinic.leadPriority}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-500">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-300">
+                            <div className="flex flex-wrap gap-1">
+                              {(clinic.focusServiceLines || clinic.serviceLines).slice(0, 2).map((s) => (
+                                <span key={s} className="text-xs px-1.5 py-0.5 bg-dark-accent rounded text-gray-400">
+                                  {s}
+                                </span>
+                              ))}
+                              {clinic.focusServiceLines && clinic.focusServiceLines.length > 2 && (
+                                <span className="text-xs text-gray-500">+{clinic.focusServiceLines.length - 2}</span>
+                              )}
+                              {clinic.state === 'TX' && clinic.marketplaceEmphasis && (
+                                <span className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/30">
+                                  TX Routing Active
+                                </span>
+                              )}
+                            </div>
+                          </td>
                         <td className="px-4 py-3 text-sm">
                           <span
                             className={clsx(
                               'px-2 py-1 rounded text-xs font-medium',
-                              clinic.verification_status === 'verified' &&
-                                'bg-status-live/10 text-status-live',
-                              clinic.verification_status === 'pending' &&
-                                'bg-status-degraded/10 text-status-degraded',
-                              clinic.verification_status === 'rejected' &&
-                                'bg-status-offline/10 text-status-offline'
-                            )}
-                          >
-                            {clinic.verification_status}
+                                clinic.status === 'verified' && 'bg-status-live/10 text-status-live',
+                                clinic.status === 'pending' && 'bg-status-degraded/10 text-status-degraded',
+                                clinic.status === 'rejected' && 'bg-status-offline/10 text-status-offline'
+                              )}
+                            >
+                              {clinic.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-300">
-                          {clinic.price_band}
-                        </td>
+                          <td className="px-4 py-3 text-sm text-gray-300">{clinic.priceBand}</td>
                         <td className="px-4 py-3 text-sm">
                           <span
                             className={clsx(
                               'text-xs',
-                              getLeadStatus(clinic) === 'Actively accepting' && 'text-status-live',
-                              getLeadStatus(clinic) === 'At capacity' && 'text-status-degraded',
-                              getLeadStatus(clinic) === 'Paused' && 'text-status-offline',
-                              getLeadStatus(clinic) === 'Open' && 'text-gray-400',
-                              getLeadStatus(clinic) === 'Pending verification' && 'text-gray-500'
-                            )}
-                          >
-                            {getLeadStatus(clinic)}
+                                clinic.leadStatus === 'actively_accepting' && 'text-status-live',
+                                clinic.leadStatus === 'at_capacity' && 'text-status-degraded',
+                                clinic.leadStatus === 'paused' && 'text-status-offline',
+                                clinic.leadStatus === 'pending_verification' && 'text-gray-500'
+                              )}
+                            >
+                              {clinic.leadStatus.replace('_', ' ')}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <span
                             className={clsx(
                               'px-2 py-1 rounded text-xs',
-                              clinic.show_in_directory
+                                clinic.visibility === 'shown'
                                 ? 'bg-status-live/10 text-status-live'
                                 : 'bg-gray-500/10 text-gray-500'
                             )}
                           >
-                            {clinic.show_in_directory ? 'Shown' : 'Hidden'}
+                              {clinic.visibility === 'shown' ? 'Shown' : 'Hidden'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-400">
-                          {new Date(clinic.updated_at).toLocaleDateString()}
+                            {new Date(clinic.updatedAt).toLocaleDateString()}
                         </td>
                       </tr>
-                    ))
-                  )}
+                      ))}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
 
-        {/* Right: Market Intel / Editor Toggle */}
         <div className="lg:col-span-2">
-          {/* Tab Switcher */}
           {!showCreate && (
             <div className="flex gap-2 mb-4">
               <button
                 onClick={() => setShowMarketIntel(true)}
                 className={clsx(
                   'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                  showMarketIntel
-                    ? 'bg-primary text-white'
-                    : 'bg-dark-surface border border-dark-border text-gray-400 hover:text-white'
+                  showMarketIntel ? 'bg-primary text-white' : 'bg-dark-surface border border-dark-border text-gray-400 hover:text-white'
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -748,9 +636,7 @@ export default function ClinicsControlPage() {
                   onClick={() => setShowMarketIntel(false)}
                   className={clsx(
                     'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                    !showMarketIntel
-                      ? 'bg-primary text-white'
-                      : 'bg-dark-surface border border-dark-border text-gray-400 hover:text-white'
+                    !showMarketIntel ? 'bg-primary text-white' : 'bg-dark-surface border border-dark-border text-gray-400 hover:text-white'
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -762,28 +648,16 @@ export default function ClinicsControlPage() {
             </div>
           )}
 
-          {/* Market Intel Panel */}
           {showMarketIntel && !showCreate ? (
             <div className="bg-dark-surface border border-dark-border rounded-lg">
-              {/* Header */}
               <div className="p-6 border-b border-dark-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Sparkles className="w-6 h-6 text-primary" />
                   <h2 className="text-xl font-semibold text-white">Clinic Market Intel</h2>
                 </div>
                 <p className="text-sm text-gray-400">Ask the market, not a spreadsheet.</p>
-                
-                {selectedClinic && (
-                  <div className="mt-3 p-3 bg-primary/10 border border-primary/30 rounded-lg">
-                    <p className="text-xs text-gray-300">
-                      <span className="font-semibold text-primary">Selected clinic:</span>{' '}
-                      {selectedClinic.name} — Ask: "Does this clinic's region need more ads?"
-                    </p>
-                  </div>
-                )}
               </div>
 
-              {/* Question Bar */}
               <div className="p-6 border-b border-dark-border">
                 <div className="flex gap-3 mb-4">
                   <input
@@ -791,7 +665,7 @@ export default function ClinicsControlPage() {
                     value={marketQuery}
                     onChange={(e) => setMarketQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleMarketScan()}
-                    placeholder="Ask: 'Where are weight loss clinics needing patients?' or 'Which TRT clinics in Texas should we target?'"
+                    placeholder="Where are weight loss clinics needing patients?"
                     className="flex-1 bg-dark-accent border border-dark-border rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary text-sm"
                   />
                   <button
@@ -812,13 +686,11 @@ export default function ClinicsControlPage() {
                     )}
                   </button>
                 </div>
-
-                {/* Quick Actions */}
                 <div className="flex flex-wrap gap-2">
-                  {QUICK_ACTIONS.map((action, idx) => (
+                  {QUICK_ACTIONS.map((action) => (
                     <button
-                      key={idx}
-                      onClick={() => handleQuickAction(action)}
+                      key={action}
+                      onClick={() => handleMarketScan(action)}
                       className="px-3 py-1.5 bg-dark-accent border border-dark-border rounded-full text-xs text-gray-300 hover:text-white hover:border-primary transition-colors"
                     >
                       {action}
@@ -827,7 +699,6 @@ export default function ClinicsControlPage() {
                 </div>
               </div>
 
-              {/* Results */}
               <div className="p-6 space-y-6 max-h-[calc(100vh-400px)] overflow-y-auto">
                 {marketIntelError && (
                   <div className="p-4 bg-status-offline/10 border border-status-offline/30 rounded-lg">
@@ -838,9 +709,7 @@ export default function ClinicsControlPage() {
                 {!marketIntelResult && !scanningMarket && !marketIntelError && (
                   <div className="text-center py-12">
                     <TrendingUp className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-white mb-2">
-                      Select a clinic or ask a question
-                    </h3>
+                    <h3 className="text-lg font-semibold text-white mb-2">Select a clinic or ask a question</h3>
                     <p className="text-sm text-gray-400">
                       Get AI-powered market intelligence to see demand, target clinics, and recommended moves.
                     </p>
@@ -862,233 +731,39 @@ export default function ClinicsControlPage() {
 
                 {marketIntelResult && (
                   <>
-                    {/* AI Market Briefing */}
-                    <div className="bg-gradient-to-r from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg p-5">
+                    <div className="bg-gradient-to-r from-primary/10 to-purple/10 border border-primary/30 rounded-lg p-5">
                       <div className="flex items-center gap-2 mb-3">
                         <Sparkles className="w-5 h-5 text-primary" />
                         <h3 className="text-lg font-semibold text-white">AI Market Briefing</h3>
                       </div>
-                      <p className="text-sm text-gray-400 mb-4 italic">"{marketIntelResult.interpretedQuestion}"</p>
-                      <div className="bg-dark-surface/80 border border-primary/20 rounded-lg p-4 mb-4">
-                        <p className="text-sm font-semibold text-white leading-relaxed">
-                          {marketIntelResult.primaryMove}
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        {marketIntelResult.secondaryMoves.map((move, idx) => (
-                          <div key={idx} className="flex items-start gap-2 text-sm text-gray-300">
-                            <span className="text-primary font-bold mt-0.5">{idx + 1}.</span>
-                            <span>{move}</span>
-                          </div>
+                      <p className="text-sm text-gray-400 mb-4 italic">"{marketIntelResult.query}"</p>
+                      <div className="space-y-3">
+                        {marketIntelResult.insights.map((insight) => (
+                          <div key={insight.id} className="bg-dark-surface/80 border border-primary/20 rounded-lg p-4">
+                            <h4 className="text-sm font-semibold text-white mb-1">{insight.title}</h4>
+                            <p className="text-sm text-gray-300 mb-2">{insight.summary}</p>
+                            <div className="flex flex-wrap gap-2 text-xs text-gray-400">
+                              {insight.regions?.map((r) => (
+                                <span key={r} className="px-2 py-1 bg-dark-accent rounded border border-dark-border">
+                                  {r}
+                                </span>
+                              ))}
+                              {insight.treatments?.map((t) => (
+                                <span key={t} className="px-2 py-1 bg-primary/10 text-primary rounded border border-primary/20">
+                                  {t}
+                          </span>
+                              ))}
+                              {insight.confidence !== undefined && (
+                                <span className="px-2 py-1 bg-purple-500/10 text-purple-300 rounded border border-purple-500/30">
+                                  Confidence: {(insight.confidence * 100).toFixed(0)}%
+                                      </span>
+                                    )}
+                                  </div>
+                                    </div>
                         ))}
                       </div>
                     </div>
 
-                    {/* Local Trends Signal */}
-                    {marketIntelResult.trendsError && !marketIntelResult.trendsData && (
-                      <div className="bg-dark-accent border border-yellow-500/30 rounded-lg p-4">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 text-yellow-500" />
-                          <p className="text-xs text-gray-300">
-                            Trends signal unavailable. BigQuery demand + clinics still loaded.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {marketIntelResult.trendsData && (
-                      <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="w-5 h-5 text-primary" />
-                            <h3 className="text-base font-semibold text-white">Local Trends Signal</h3>
-                          </div>
-                          <span
-                            className={clsx(
-                              'px-2.5 py-1 rounded-full text-xs font-medium',
-                              marketIntelResult.trendsData.trendDirection === 'RISING' && 'bg-status-live/10 text-status-live',
-                              marketIntelResult.trendsData.trendDirection === 'STABLE' && 'bg-gray-500/10 text-gray-400',
-                              marketIntelResult.trendsData.trendDirection === 'FALLING' && 'bg-status-offline/10 text-status-offline'
-                            )}
-                          >
-                            {marketIntelResult.trendsData.trendDirection}
-                          </span>
-                        </div>
-                        
-                        <p className="text-xs text-gray-400 mb-3">
-                          Service Line: <span className="text-white font-medium">{marketIntelResult.trendsData.serviceLine}</span> in{' '}
-                          <span className="text-white font-medium">{marketIntelResult.trendsData.region}</span>
-                        </p>
-
-                        {marketIntelResult.trendsData.risingQueries.length > 0 && (
-                          <div className="mb-3">
-                            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                              Top Rising Queries
-                            </h4>
-                            <div className="space-y-1">
-                              {marketIntelResult.trendsData.risingQueries.slice(0, 3).map((q, idx) => (
-                                <div key={idx} className="text-xs text-gray-300 flex items-start gap-1">
-                                  <span className="text-primary">↗</span>
-                                  <span>{q.query}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {marketIntelResult.trendSummary && (
-                          <div className="pt-3 border-t border-dark-border">
-                            <p className="text-xs text-gray-300 mb-2">
-                              <span className="font-semibold text-gray-400">AI view:</span>{' '}
-                              {marketIntelResult.trendSummary.slice(0, 150)}{marketIntelResult.trendSummary.length > 150 ? '...' : ''}
-                            </p>
-                          </div>
-                        )}
-
-                        {marketIntelResult.firstMove && (
-                          <div className="mt-3 pt-3 border-t border-dark-border bg-primary/5 -m-5 mt-3 p-3 rounded-b-lg">
-                            <p className="text-xs text-gray-400 mb-1">
-                              <span className="font-semibold text-primary">First move:</span>
-                            </p>
-                            <p className="text-xs text-white leading-relaxed">
-                              {marketIntelResult.firstMove}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Region Demand Snapshot */}
-                    <div className="bg-dark-accent border border-dark-border rounded-lg">
-                      <div className="p-4 border-b border-dark-border">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-5 h-5 text-primary" />
-                          <h3 className="text-lg font-semibold text-white">Region Demand Snapshot</h3>
-                        </div>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead className="bg-dark-surface border-b border-dark-border">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Region</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Service</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Demand</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Trend</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-dark-border">
-                            {marketIntelResult.regionDemand.slice(0, 8).map((rd, idx) => {
-                              const isTrendAligned = marketIntelResult.trendsData?.topRegions.some(
-                                (tr) => tr.region === rd.region || tr.region.includes(rd.region)
-                              )
-                              const isSelectedRegion = selectedClinic?.state === rd.region
-                              
-                              return (
-                              <tr
-                                key={idx}
-                                className={clsx(
-                                  'hover:bg-dark-hover transition-colors',
-                                  isSelectedRegion && 'bg-primary/10 border-l-4 border-primary'
-                                )}
-                              >
-                                <td className="px-4 py-3 text-sm text-white font-medium">
-                                  <div className="flex items-center gap-2">
-                                    {rd.region}
-                                    {isTrendAligned && (
-                                      <span className="px-1.5 py-0.5 bg-purple-500/20 border border-purple-500/40 rounded text-xs text-purple-300">
-                                        Trend-aligned
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-300">{rd.serviceLine}</td>
-                                <td className="px-4 py-3 text-sm">
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex-1 bg-dark-surface rounded-full h-2 max-w-[60px]">
-                                      <div
-                                        className={clsx(
-                                          'h-2 rounded-full',
-                                          rd.demandIndex >= 85 ? 'bg-status-live' : 
-                                          rd.demandIndex >= 70 ? 'bg-status-degraded' : 'bg-gray-500'
-                                        )}
-                                        style={{ width: `${rd.demandIndex}%` }}
-                                      ></div>
-                                    </div>
-                                    <span className="text-white font-medium">{rd.demandIndex}</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-sm">
-                                  <span
-                                    className={clsx(
-                                      'px-2 py-1 rounded text-xs font-medium',
-                                      rd.trend === 'Rising' && 'bg-status-live/10 text-status-live',
-                                      rd.trend === 'Stable' && 'bg-gray-500/10 text-gray-400',
-                                      rd.trend === 'Falling' && 'bg-status-offline/10 text-status-offline'
-                                    )}
-                                  >
-                                    {rd.trend}
-                                  </span>
-                                </td>
-                              </tr>
-                            )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Target Clinics */}
-                    <div className="bg-dark-accent border border-dark-border rounded-lg">
-                      <div className="p-4 border-b border-dark-border">
-                        <div className="flex items-center gap-2">
-                          <Target className="w-5 h-5 text-primary" />
-                          <h3 className="text-lg font-semibold text-white">Target Clinics</h3>
-                        </div>
-                      </div>
-                      <div className="divide-y divide-dark-border max-h-[400px] overflow-y-auto">
-                        {marketIntelResult.targetClinics.map((tc, idx) => {
-                          const isSelected = selectedClinic?.id === tc.clinic_id
-                          return (
-                            <div
-                              key={idx}
-                              className={clsx(
-                                'p-4 hover:bg-dark-hover transition-colors',
-                                isSelected && 'bg-primary/10 border-l-4 border-primary'
-                              )}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <h4 className="text-sm font-semibold text-white">
-                                    {tc.name}
-                                    {isSelected && (
-                                      <span className="ml-2 text-xs px-2 py-0.5 bg-primary/20 border border-primary/40 rounded-full text-primary">
-                                        Your selected clinic
-                                      </span>
-                                    )}
-                                  </h4>
-                                  <p className="text-xs text-gray-400 mt-0.5">
-                                    {tc.city}, {tc.state}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                {tc.serviceLines.map((service, sidx) => (
-                                  <span
-                                    key={sidx}
-                                    className="text-xs px-1.5 py-0.5 bg-dark-surface rounded text-gray-400"
-                                  >
-                                    {service}
-                                  </span>
-                                ))}
-                              </div>
-                              <p className="text-xs text-primary">→ {tc.why_target}</p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Deep Link */}
                     <div className="p-4 bg-dark-accent border border-dark-border rounded-lg">
                       <Link
                         href={`/admin/market-intelligence?q=${encodeURIComponent(marketQuery)}`}
@@ -1101,236 +776,253 @@ export default function ClinicsControlPage() {
                   </>
                 )}
               </div>
-
-              {/* Ad Activity & Outreach Panel */}
-              {selectedClinic && (
-                <div className="bg-dark-surface border border-dark-border rounded-lg">
-                  <div className="p-6 border-b border-dark-border">
-                    <div className="flex items-center gap-2">
-                      <Target className="w-5 h-5 text-primary" />
-                      <h2 className="text-xl font-semibold text-white">Ad Activity & Outreach</h2>
                     </div>
-                    <p className="text-sm text-gray-400 mt-1">See their ads strategy and get AI-generated outreach steps</p>
+          ) : showCreate ? (
+            <div className="bg-dark-surface border border-dark-border rounded-lg p-6 space-y-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Create New Clinic
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <input
+                  placeholder="Clinic Name"
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                />
+                <input
+                  placeholder="City"
+                  value={createForm.city}
+                  onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                />
+                <input
+                  placeholder="State (e.g. TX)"
+                  value={createForm.state}
+                  onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                />
+                <input
+                  placeholder="Service lines (comma separated)"
+                  value={createForm.serviceLines.join(', ')}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      serviceLines: e.target.value
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                />
+                <select
+                  value={createForm.status}
+                  onChange={(e) => setCreateForm({ ...createForm, status: e.target.value as ClinicDirectoryStatus })}
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <select
+                  value={createForm.priceBand}
+                  onChange={(e) => setCreateForm({ ...createForm, priceBand: e.target.value as ClinicPriceBand })}
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                >
+                  <option value="$">$</option>
+                  <option value="$$">$$</option>
+                  <option value="$$$">$$$</option>
+                  <option value="$$$$">$$$$</option>
+                </select>
+                <select
+                  value={createForm.leadStatus}
+                  onChange={(e) => setCreateForm({ ...createForm, leadStatus: e.target.value as ClinicLeadStatus })}
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                >
+                  <option value="pending_verification">Pending verification</option>
+                  <option value="actively_accepting">Actively accepting</option>
+                  <option value="at_capacity">At capacity</option>
+                  <option value="paused">Paused</option>
+                </select>
+                <select
+                  value={createForm.visibility}
+                  onChange={(e) => setCreateForm({ ...createForm, visibility: e.target.value as ClinicVisibility })}
+                  className="bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                >
+                  <option value="shown">Shown</option>
+                  <option value="hidden">Hidden</option>
+                </select>
                   </div>
-
-                  <div className="p-6 space-y-6 max-h-[calc(100vh-400px)] overflow-y-auto">
-                    {loadingAdsIntel && (
-                      <div className="space-y-4">
-                        <div className="bg-dark-accent rounded-lg p-6 animate-pulse">
-                          <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
-                          <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreate}
+                  disabled={saving}
+                  className="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save Clinic'}
+                </button>
+                <button
+                  onClick={() => setShowCreate(false)}
+                  className="px-4 py-2 bg-dark-accent border border-dark-border rounded-lg text-gray-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                {saveMessage && <span className="text-xs text-status-offline">{saveMessage}</span>}
                         </div>
                       </div>
-                    )}
-
-                    {adsIntelError && (
-                      <div className="p-4 bg-status-offline/10 border border-status-offline/30 rounded-lg">
-                        <p className="text-sm text-status-offline">{adsIntelError}</p>
+          ) : selectedClinic ? (
+            <div className="bg-dark-surface border border-dark-border rounded-lg p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-white">{selectedClinic.name}</h3>
+                  <p className="text-sm text-gray-400">
+                    {selectedClinic.city}, {selectedClinic.state}
+                  </p>
                       </div>
-                    )}
-
-                    {!loadingAdsIntel && adsActivity && outreachStrategy && (
-                      <>
-                        {/* Ad Activity Snapshot */}
-                        <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
-                          <h3 className="text-lg font-semibold text-white mb-4">Ad Activity Snapshot</h3>
-                          
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <span className={clsx(
-                                'px-3 py-1 rounded-full text-xs font-medium',
-                                adsActivity.isRunningAds 
-                                  ? 'bg-status-live/10 text-status-live' 
-                                  : 'bg-gray-500/10 text-gray-400'
-                              )}>
-                                {adsActivity.isRunningAds ? 'Running ads' : 'No active ads detected'}
-                              </span>
+                {saving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                             </div>
+              {saveMessage && <div className="text-xs text-status-offline">{saveMessage}</div>}
 
-                            {adsActivity.isRunningAds ? (
-                              <>
-                                <div>
-                                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                                    Platforms
-                                  </h4>
-                                  <div className="flex flex-wrap gap-2">
-                                    {adsActivity.platforms.map((p: any, idx: number) => (
-                                      <span
-                                        key={idx}
-                                        className="px-3 py-1 bg-primary/20 border border-primary/40 rounded-full text-sm text-white"
-                                      >
-                                        {p.platform} ({p.activeCampaignCount} campaigns)
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                                    Regions Targeted
-                                  </h4>
-                                  <div className="flex flex-wrap gap-2">
-                                    {adsActivity.regionsTargeted.slice(0, 3).map((r: any, idx: number) => (
-                                      <span
-                                        key={idx}
-                                        className="px-2 py-1 bg-dark-surface border border-dark-border rounded text-xs text-gray-300"
-                                      >
-                                        {r.region} ({r.intensity})
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              </>
-                            ) : (
-                              <p className="text-sm text-gray-300 italic">
-                                No active campaigns detected. Great opportunity to be their growth partner early.
-                              </p>
-                            )}
+              {/* Routing Map Card */}
+              <div className="bg-dark-bg border border-dark-border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">Routing Map · Clinic ↔ Marketplace</h4>
+                    <p className="text-xs text-gray-500">State-aware routing powered by clinic_marketplace_link_v1</p>
+                  </div>
+                  {runningRouting && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs text-gray-300">
+                  <div>
+                    <p className="text-gray-500 mb-1">State / Rev per Patient</p>
+                    <p>
+                      {selectedClinic.state || '—'} ·{' '}
+                      {selectedClinic.revenuePerPatient ? `$${selectedClinic.revenuePerPatient}` : 'uses TX defaults'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 mb-1">Lead Routing Priority</p>
+                    <p className="font-semibold text-white capitalize">{selectedClinic.leadPriority || 'not set'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 mb-1">Focus Service Lines</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(selectedClinic.focusServiceLines || selectedClinic.serviceLines).map((s) => (
+                        <span key={s} className="px-2 py-0.5 bg-dark-accent border border-dark-border rounded text-[11px] text-gray-200">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 mb-1">Marketplace Emphasis</p>
+                    <div className="space-y-1">
+                      {selectedClinic.marketplaceEmphasis ? (
+                        Object.entries(selectedClinic.marketplaceEmphasis).map(([k, v]) => (
+                          <div key={k} className="flex items-center justify-between text-[11px]">
+                            <span className="text-gray-300 capitalize">{k}</span>
+                            <span className="text-primary font-semibold capitalize">{v}</span>
                           </div>
-                        </div>
-
-                        {/* Creative & Offer Summary */}
-                        {adsActivity.isRunningAds && adsActivity.creativesSummary.length > 0 && (
-                          <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
-                            <h3 className="text-lg font-semibold text-white mb-4">Creative & Offer Summary</h3>
-                            <ul className="space-y-2">
-                              {adsActivity.creativesSummary.map((creative: any, idx: number) => (
-                                <li key={idx} className="text-sm text-gray-300">
-                                  <span className="text-primary">•</span>{' '}
-                                  Leading with <span className="text-white font-medium">"{creative.theme}"</span> messaging.
-                                  {creative.offerType && (
-                                    <> Offer: <span className="text-white font-medium">{creative.offerType}</span>.</>
-                                  )}
-                                  {creative.ctaPatterns.length > 0 && (
-                                    <> Primary CTA: <span className="text-white font-medium">{creative.ctaPatterns[0]}</span>.</>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                            {adsActivity.funnelExamples.length > 0 && (
-                              <div className="mt-3 pt-3 border-t border-dark-border">
-                                <p className="text-xs text-gray-400">
-                                  Landing page: {adsActivity.funnelExamples[0].funnelNotes}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Outreach Strategy */}
-                        <div className="bg-dark-accent border border-dark-border rounded-lg p-5">
-                          <h3 className="text-lg font-semibold text-white mb-4">Outreach Strategy</h3>
-                          
-                          <div className="mb-4">
-                            <p className="text-sm text-white font-medium mb-2">{outreachStrategy.fitAssessment}</p>
-                            <p className="text-sm text-gray-300">{outreachStrategy.whyNow}</p>
-                          </div>
-
-                          <div>
-                            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                              Steps
-                            </h4>
-                            <ol className="space-y-2">
-                              {outreachStrategy.outreachSteps.map((step: string, idx: number) => (
-                                <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
-                                  <span className="text-primary font-bold mt-0.5">{idx + 1}.</span>
-                                  <span>{step}</span>
-                                </li>
-                              ))}
-                            </ol>
-                          </div>
-                        </div>
-
-                        {/* AI-Generated First Message */}
-                        <div className="bg-gradient-to-r from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg p-5">
-                          <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-white">First Message Draft</h3>
-                            <button
-                              onClick={fetchAdsActivityAndOutreach}
-                              className="px-3 py-1.5 bg-primary/20 border border-primary/40 rounded-lg text-xs text-primary hover:bg-primary/30 transition-colors"
-                            >
-                              Regenerate Variant
-                            </button>
-                          </div>
-
-                          {outreachStrategy.firstMessage.channel === 'email' && (
-                            <div className="mb-3">
-                              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                                Subject Line
-                              </label>
-                              <div className="mt-1 p-3 bg-dark-surface border border-dark-border rounded-lg text-sm text-white font-medium">
-                                {outreachStrategy.firstMessage.subjectLine}
-                              </div>
-                            </div>
-                          )}
-
-                          <div>
-                            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">
-                              Message Body
-                            </label>
-                            <div className="mt-1 p-4 bg-dark-surface border border-dark-border rounded-lg">
-                              <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
-                                {outreachStrategy.firstMessage.body}
-                              </pre>
-                            </div>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(outreachStrategy.firstMessage.body)
-                              }}
-                              className="mt-2 px-3 py-1.5 bg-dark-accent border border-dark-border rounded-lg text-xs text-gray-300 hover:text-white hover:border-primary transition-colors"
-                            >
-                              Copy to Clipboard
-                            </button>
-                          </div>
-
-                          {outreachStrategy.alternateOpeners.length > 0 && (
-                            <div className="mt-4 pt-4 border-t border-primary/20">
-                              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                                Alternate Openers
-                              </h4>
-                              <ul className="space-y-1">
-                                {outreachStrategy.alternateOpeners.map((opener: string, idx: number) => (
-                                  <li key={idx} className="text-xs text-gray-300 italic">
-                                    "{opener}"
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-
-                    {!loadingAdsIntel && !adsActivity && !adsIntelError && (
-                      <div className="text-center py-8">
-                        <Target className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                        <p className="text-sm text-gray-400">
-                          Ad activity and outreach data will load automatically when a clinic is selected.
-                        </p>
-                      </div>
-                    )}
+                        ))
+                      ) : (
+                        <span className="text-gray-500 text-[11px]">Not yet applied</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
-          ) : showCreate ? (
-            <ClinicEditor
-              clinicId={null}
-              onSave={() => {
-                setShowCreate(false)
-                setSelectedClinicId(null)
-                fetchClinics()
-              }}
-              onCancel={() => setShowCreate(false)}
-            />
-          ) : selectedClinicId ? (
-            <ClinicEditor
-              clinicId={selectedClinicId}
-              onSave={() => {
-                fetchClinics()
-              }}
-              onCancel={() => setSelectedClinicId(null)}
-            />
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <button
+                    onClick={handleRunTxRouting}
+                    disabled={runningRouting}
+                    className="px-3 py-2 bg-primary text-white rounded-lg text-xs hover:bg-primary-dark transition-colors disabled:opacity-50"
+                  >
+                    Run TX Routing Map
+                  </button>
+                  <Link
+                    href={`/marketplace?state=TX&clinicId=${selectedClinic.id}`}
+                    className="px-3 py-2 bg-dark-accent border border-dark-border rounded-lg text-xs text-gray-300 hover:text-white hover:border-primary transition-colors"
+                  >
+                    Open Marketplace View
+                  </Link>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                <div>
+                  <p className="text-xs text-gray-500 mb-1">Status</p>
+                  <select
+                    value={(pendingEdits.status as ClinicDirectoryStatus) || selectedClinic.status}
+                    onChange={(e) => setPendingEdits({ ...pendingEdits, status: e.target.value as ClinicDirectoryStatus })}
+                    className="w-full bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                  >
+                    <option value="verified">Verified</option>
+                    <option value="pending">Pending</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                                  </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Price Band</p>
+                  <select
+                    value={(pendingEdits.priceBand as ClinicPriceBand) || selectedClinic.priceBand}
+                    onChange={(e) => setPendingEdits({ ...pendingEdits, priceBand: e.target.value as ClinicPriceBand })}
+                    className="w-full bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                  >
+                    <option value="$">$</option>
+                    <option value="$$">$$</option>
+                    <option value="$$$">$$$</option>
+                    <option value="$$$$">$$$$</option>
+                  </select>
+                                </div>
+                                <div>
+                  <p className="text-xs text-gray-500 mb-1">Lead Status</p>
+                  <select
+                    value={(pendingEdits.leadStatus as ClinicLeadStatus) || selectedClinic.leadStatus}
+                    onChange={(e) => setPendingEdits({ ...pendingEdits, leadStatus: e.target.value as ClinicLeadStatus })}
+                    className="w-full bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                  >
+                    <option value="actively_accepting">Actively accepting</option>
+                    <option value="at_capacity">At capacity</option>
+                    <option value="paused">Paused</option>
+                    <option value="pending_verification">Pending verification</option>
+                  </select>
+                                  </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Visibility</p>
+                  <select
+                    value={(pendingEdits.visibility as ClinicVisibility) || selectedClinic.visibility}
+                    onChange={(e) => setPendingEdits({ ...pendingEdits, visibility: e.target.value as ClinicVisibility })}
+                    className="w-full bg-dark-accent border border-dark-border rounded-lg px-3 py-2 text-white"
+                  >
+                    <option value="shown">Shown</option>
+                    <option value="hidden">Hidden</option>
+                  </select>
+                                </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs text-gray-500 mb-1">Service Lines</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedClinic.serviceLines.map((s) => (
+                      <span key={s} className="px-2 py-1 bg-dark-accent border border-dark-border rounded text-xs text-gray-300">
+                        {s}
+                      </span>
+                    ))}
+                              </div>
+                          </div>
+                          </div>
+              <div className="flex gap-3">
+                            <button
+                  disabled={saving}
+                  onClick={handleSaveEdits}
+                  className="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-50"
+                            >
+                  Save Changes
+                            </button>
+                            <button
+                  onClick={() => setSelectedClinicId(null)}
+                  className="px-4 py-2 bg-dark-accent border border-dark-border rounded-lg text-gray-300 hover:text-white"
+                >
+                  Close
+                            </button>
+                          </div>
+                            </div>
           ) : null}
         </div>
       </div>

@@ -8,12 +8,14 @@ export interface McpServerGridProps {
   servers: McpServer[]
   onViewLogs?: (serverId: string) => void
   onRestart?: (serverId: string) => void
+  restartingServers?: Set<string>
 }
 
 export default function McpServerGrid({
   servers,
   onViewLogs,
   onRestart,
+  restartingServers = new Set(),
 }: McpServerGridProps) {
   return (
     <div className="bg-dark-surface border border-dark-border rounded-xl p-8 shadow-lg">
@@ -33,6 +35,7 @@ export default function McpServerGrid({
             server={server}
             onViewLogs={onViewLogs}
             onRestart={onRestart}
+            isRestarting={restartingServers.has(server.id)}
           />
         ))}
       </div>
