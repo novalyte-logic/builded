@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Terminal, Server, Wrench, Copy, Check } from 'lucide-react'
+import { Terminal, Server, Wrench, Copy, Check, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import { mcpRegistry, McpServerConfig, McpToolConfig } from '@/lib/mcp/registry'
 import { callMcpTool } from '@/lib/mcp/client'
@@ -11,6 +11,8 @@ import McpResponseViewer from '@/components/admin/signal-console/McpResponseView
 import SessionHistory, { SessionCall } from '@/components/admin/signal-console/SessionHistory'
 import PageTransition from '@/components/admin/animation/PageTransition'
 import AnimatedCard from '@/components/admin/animation/AnimatedCard'
+import SmartQueryAssistant from '@/components/admin/smart-query/SmartQueryAssistant'
+import { useSmartQueryAssistant } from '@/lib/smart-query/hooks'
 
 function SignalConsoleContent() {
   const searchParams = useSearchParams()
@@ -48,6 +50,10 @@ function SignalConsoleContent() {
     latency?: number
   }>()
   const [sessionHistory, setSessionHistory] = useState<SessionCall[]>([])
+  
+  // Smart Query state
+  const [smartQueryText, setSmartQueryText] = useState('')
+  const [showSmartQuery, setShowSmartQuery] = useState(true)
 
   // Get selected server and tool
   const selectedServer = useMemo(() => {
@@ -58,6 +64,12 @@ function SignalConsoleContent() {
     if (!selectedServer || !selectedToolName) return null
     return selectedServer.tools[selectedToolName] || null
   }, [selectedServer, selectedToolName])
+
+  // Smart Query Assistant hook
+  const { engineProps, recordQuery } = useSmartQueryAssistant(
+    selectedServerId || null,
+    selectedToolName || null
+  )
 
   // Reset tool selection when server changes
   const handleServerChange = (serverId: string) => {
@@ -243,6 +255,40 @@ Please help me understand:
                     {selectedTool && (
                       <p className="text-xs text-gray-500/70 mt-2 leading-relaxed">{selectedTool.description}</p>
                     )}
+                  </div>
+                )}
+
+                {/* Smart Query Assistant */}
+                {selectedTool && showSmartQuery && (
+                  <div className="mt-4 pt-4 border-t border-white/5">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-xs font-medium text-gray-400/90 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-primary" />
+                        Smart Query Assistant
+                      </label>
+                      <button
+                        onClick={() => setShowSmartQuery(false)}
+                        className="text-[10px] text-gray-500 hover:text-gray-400 transition-colors"
+                      >
+                        Hide
+                      </button>
+                    </div>
+                    <SmartQueryAssistant
+                      engineProps={engineProps}
+                      currentQuery={smartQueryText}
+                      onQueryChange={setSmartQueryText}
+                      showDatasets={true}
+                      showIntentAnalysis={true}
+                      maxSuggestions={6}
+                      onSuggestionSelect={(suggestion) => {
+                        setSmartQueryText(suggestion.text)
+                        // Record successful suggestion usage
+                        recordQuery(suggestion.text, true)
+                      }}
+                    />
+                    <p className="text-[10px] text-gray-600 mt-2">
+                      AI-powered suggestions based on tool capabilities and your query history
+                    </p>
                   </div>
                 )}
               </div>
