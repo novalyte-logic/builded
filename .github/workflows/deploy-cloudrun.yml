@@ -1,4 +1,4 @@
-name: Deploy to Cloud Run (Service Account Key)
+name: Deploy to Cloud Run (Workload Identity)
 
 on:
   push:
@@ -10,10 +10,16 @@ env:
   SERVICE_NAME: novalyte-admin
   REGION: us-central1
   IMAGE_NAME: gcr.io/manually-built/novalyte-admin
+  WORKLOAD_IDENTITY_PROVIDER: projects/446579640972/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  SERVICE_ACCOUNT: github-wif-deployer@manually-built.iam.gserviceaccount.com
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
       - name: Checkout code
@@ -22,12 +28,13 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker to use gcloud as credential helper
+      - name: Configure Docker to use gcloud
         run: |
           gcloud auth configure-docker gcr.io
 
@@ -59,7 +66,7 @@ jobs:
 
       - name: Show deployment URL
         run: |
-          echo "Deployment successful!"
+          echo "🎉 Deployment successful!"
           gcloud run services describe ${{ env.SERVICE_NAME }} \
             --region ${{ env.REGION }} \
             --format 'value(status.url)' \
