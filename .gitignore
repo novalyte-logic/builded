@@ -45,3 +45,8 @@ next-env.d.ts
 # IDE
 .vscode/
 .cursor/
+
+# GCP Service Account Keys (NEVER COMMIT THESE!)
+gcp-sa-key.json
+*-sa-key.json
+credentials.json
