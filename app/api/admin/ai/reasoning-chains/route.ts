@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ReasoningChain } from '@/lib/types/ai-core'
-import { chains } from '../metrics/route'
+import { chains } from '@/lib/api-data/ai-data'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)

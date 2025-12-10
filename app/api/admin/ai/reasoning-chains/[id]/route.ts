@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { chains } from '../../metrics/route'
+import { chains } from '@/lib/api-data/ai-data'
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const chain = chains.find((c) => c.id === params.id)

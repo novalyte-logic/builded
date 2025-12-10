@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { modules } from '../metrics/route'
+import { modules } from '@/lib/api-data/ai-data'
 
 export async function POST(req: NextRequest) {
   const body = await req.json()

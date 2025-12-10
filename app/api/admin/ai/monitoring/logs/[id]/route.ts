@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { InferenceLogDetail } from '@/lib/types/ai-monitoring'
-import { baseLogs } from '../route'
+import { baseLogs } from '@/lib/api-data/monitoring-data'
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const item = baseLogs.find((l) => l.id === params.id)

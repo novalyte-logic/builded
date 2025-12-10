@@ -227,12 +227,19 @@ export interface FindAvailableStaffInput {
 }
 
 export interface FindAvailableStaffOutput {
+  summary: {
+    total: number
+    byRole: Record<string, number>
+  }
   staff: Array<{
+    id: string
     displayName: string
     roleType: string
     yearsExperience: number
     primarySkills: string[]
+    skills: string[]
     preferredShifts: string[]
+    preferredRegions: string[]
   }>
 }
 
@@ -255,10 +262,26 @@ export interface MatchShiftsToStaffInput {
 }
 
 export interface MatchShiftsToStaffOutput {
+  summary: {
+    matchedShifts: number
+    totalMatches: number
+  }
   matches: Array<{
     shiftId: string
     staffId: string
     fitScore: number
+    compatibilityScore: number
+    recommendation: 'strong_match' | 'good_match' | 'weak_match'
+    notes: string
+    shift: {
+      clinicName: string
+      treatmentType: string
+    }
+    staff: {
+      displayName: string
+      roleType: string
+      location: { city: string; state: string }
+    }
   }>
 }
 

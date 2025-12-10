@@ -1,21 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { InferenceLogItem, InferenceLogResponse } from '@/lib/types/ai-monitoring'
-
-export const baseLogs: InferenceLogItem[] = Array.from({ length: 25 }).map((_, idx) => {
-  const now = Date.now()
-  return {
-    id: `log-${idx + 1}`,
-    timestamp: new Date(now - idx * 60 * 1000).toISOString(),
-    modelName: ['Symptom Classifier', 'Risk Engine', 'Provider Matching', 'Marketplace ROI'][idx % 4],
-    latencyMs: 80 + (idx % 7) * 15,
-    confidencePct: 80 + (idx % 6) * 3,
-    inputPreview: 'Patient query or data input',
-    outputPreview: 'Model prediction output',
-    outputTag: idx % 5 === 0 ? 'High risk detected' : undefined,
-    safetyFlags: idx % 6 === 0 ? ['High risk detected'] : [],
-    relatedChainId: idx % 3 === 0 ? 'chain-1' : undefined,
-  }
-})
+import { InferenceLogResponse } from '@/lib/types/ai-monitoring'
+import { baseLogs } from '@/lib/api-data/monitoring-data'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
