@@ -355,14 +355,3 @@ Each suggestion should be immediately usable and relevant to healthcare/wellness
 
 Output as JSON array of { text, category, confidence } objects.`
 }
-
-export {
-  generateAIMetaPrompt,
-  generateSystemPrompt,
-  buildAISuggestionRequest,
-  parseAISuggestionResponse,
-  getToolSpecificPrompt,
-  enhancePromptWithIntent,
-  fetchAISuggestions,
-  generateBatchPrompt,
-}

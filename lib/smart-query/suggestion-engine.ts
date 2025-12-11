@@ -651,14 +651,3 @@ const INTENT_BASED_TEMPLATES: Record<keyof IntentVector, string[]> = {
   ],
 }
 
-// ============================================================================
-// Export Utility Functions
-// ============================================================================
-
-export {
-  calculateIntentVector,
-  getRelevantDatasets,
-  getMatchingPatterns,
-  parseManifestForSuggestions,
-  generateSuggestions,
-}
